@@ -21,7 +21,8 @@ const raidOyuncuEkleKomutu = new SlashCommandBuilder()
             .addChoices(
                 { name: 'TANK', value: 'tank' },
                 { name: 'HEALER', value: 'heal' },
-                { name: 'DPS', value: 'dps' }
+                { name: 'DPS', value: 'dps' },
+                { name: 'YEDEK', value: 'yedek' }
             )
     )
     .addUserOption(option =>
@@ -48,7 +49,25 @@ const zindanListesi = [
     { label: 'ASH (Advanced Soul Harvester)', value: 'ASH', description: 'Soul Harvester - Advanced' }
 ];
 
-const gunListesi = Array.from({ length: 25 }, (_, i) => ({ label: `${i + 1}`, value: `${i + 1}` }));
+// Discord select menülerinde tek menüde en fazla 25 seçenek olabilir.
+// Bu yüzden 31 günü iki ayrı gün menüsüne bölüyoruz.
+const gunListesi = Array.from({ length: 31 }, (_, i) => ({ label: `${i + 1}`, value: `${i + 1}` }));
+
+function gunMenuleriniOlustur(data = {}) {
+    const secilenGunPlaceholder = data.gun ? `Seçilen Gün: ${data.gun}` : null;
+
+    const gunMenu1 = new StringSelectMenuBuilder()
+        .setCustomId('raid_tarih_gun_1')
+        .setPlaceholder(secilenGunPlaceholder || 'Günü Seçin (1-16)...')
+        .addOptions(gunListesi.slice(0, 16));
+
+    const gunMenu2 = new StringSelectMenuBuilder()
+        .setCustomId('raid_tarih_gun_2')
+        .setPlaceholder(secilenGunPlaceholder || 'Günü Seçin (17-31)...')
+        .addOptions(gunListesi.slice(16));
+
+    return [gunMenu1, gunMenu2];
+}
 
 const ayListesi = [
     { label: 'Ocak', value: '0' }, { label: 'Şubat', value: '1' }, { label: 'Mart', value: '2' },
@@ -85,6 +104,17 @@ const klasSecenekleri = {
         { label: 'Wizard', value: 'Wizard', emoji: '<:klaswizard:1506316021664055408>' },
         { label: 'Ranger', value: 'Ranger', emoji: '<:klasranger:1506315982912753694>' },
         { label: 'Bard', value: 'Bard', emoji: '<:klasbard:1506315579521372210>' }
+    ],
+    yedek: [
+        { label: 'Paladin', value: 'Paladin', emoji: '<:klaspaladin:1506316091322929163>' },
+        { label: 'Fighter', value: 'Fighter', emoji: '<:klasfighter:1506316057407655956>' },
+        { label: 'Barbarian', value: 'Barbarian', emoji: '<:klasbarbar:1506315488073093142>' },
+        { label: 'Cleric', value: 'Cleric', emoji: '<:klascleric:1506315663860568164>' },
+        { label: 'Bard', value: 'Bard', emoji: '<:klasbard:1506315579521372210>' },
+        { label: 'Warlock', value: 'Warlock', emoji: '<:klaswarlock:1506316156796014662>' },
+        { label: 'Rogue', value: 'Rogue', emoji: '<:klasrogue:1506316128090329099>' },
+        { label: 'Wizard', value: 'Wizard', emoji: '<:klaswizard:1506316021664055408>' },
+        { label: 'Ranger', value: 'Ranger', emoji: '<:klasranger:1506315982912753694>' }
     ]
 };
 
@@ -134,19 +164,22 @@ async function raidManuelOyuncuEkle(interaction) {
     const katilimciMetni = `${kullaniciObj.toString()} (${emoji} ${secilenKlasValue})`;
 
     const temizle = (liste) => liste.filter(item => !item.includes(kullaniciObj.toString()));
-    veri.tanklar = temizle(veri.tanklar);
-    veri.healerlar = temizle(veri.healerlar);
-    veri.dpsler = temizle(veri.dpsler);
+    veri.tanklar = temizle(veri.tanklar || []);
+    veri.healerlar = temizle(veri.healerlar || []);
+    veri.dpsler = temizle(veri.dpsler || []);
+    veri.yedekler = temizle(veri.yedekler || []);
 
     if (rol === 'tank') veri.tanklar.push(katilimciMetni);
     if (rol === 'heal') veri.healerlar.push(katilimciMetni);
     if (rol === 'dps') veri.dpsler.push(katilimciMetni);
+    if (rol === 'yedek') veri.yedekler.push(katilimciMetni);
 
     raidHafizasi.set(mesajId, veri);
 
     const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : '⚠️ Kadro Boş';
     const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : '⚠️ Kadro Boş';
     const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : '⚠️ Kadro Boş';
+    const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : '⚠️ Yedek Boş';
 
     const maviTiklanabilirBaslik = `[${veri.zindan.toUpperCase()} RUNU](https://discord.com)`;
 
@@ -157,7 +190,8 @@ async function raidManuelOyuncuEkle(interaction) {
         .addFields(
             { name: `<:klastanks:1508412246081015970> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
             { name: `<:klasheals:1508412311537455205> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
-            { name: `<:klasdpss:1508412362099527751> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true }
+            { name: `<:klasdpss:1508412362099527751> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
+            { name: `📌 YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
         )
         .setTimestamp()
         .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
@@ -216,20 +250,21 @@ async function raidSisteminiYonet(interaction) {
                 saat: null
             });
 
-            const gunMenu = new StringSelectMenuBuilder().setCustomId('raid_tarih_gun').setPlaceholder('Günü Seçin (1-25)...').addOptions(gunListesi);
+            const [gunMenu1, gunMenu2] = gunMenuleriniOlustur();
             const ayMenu = new StringSelectMenuBuilder().setCustomId('raid_tarih_ay').setPlaceholder('Ayı Seçin...').addOptions(ayListesi);
 
-            const row1 = new ActionRowBuilder().addComponents(gunMenu);
-            const row2 = new ActionRowBuilder().addComponents(ayMenu);
+            const row1 = new ActionRowBuilder().addComponents(gunMenu1);
+            const row2 = new ActionRowBuilder().addComponents(gunMenu2);
+            const row3 = new ActionRowBuilder().addComponents(ayMenu);
 
-            return await interaction.update({ content: '<:iconflight:1508409696791564441> **Raid Tarihi Belirleme:** Lütfen listeden **Gün** ve **Ay** seçimi yapın:', components: [row1, row2] });
+            return await interaction.update({ content: '<:iconflight:1508409696791564441> **Raid Tarihi Belirleme:** Lütfen listeden **Gün** ve **Ay** seçimi yapın:', components: [row1, row2, row3] });
         }
 
-        if (interaction.isStringSelectMenu() && (interaction.customId === 'raid_tarih_gun' || interaction.customId === 'raid_tarih_ay')) {
+        if (interaction.isStringSelectMenu() && (interaction.customId.startsWith('raid_tarih_gun_') || interaction.customId === 'raid_tarih_ay')) {
             const data = secimHafizasi.get(interaction.user.id);
             if (!data) return await interaction.reply({ content: '❌ İşlem zaman aşımına uğradı, lütfen komutu tekrar çalıştırın.', flags: [64] });
 
-            if (interaction.customId === 'raid_tarih_gun') data.gun = interaction.values[0];
+            if (interaction.customId.startsWith('raid_tarih_gun_')) data.gun = interaction.values[0];
             if (interaction.customId === 'raid_tarih_ay') data.ay = interaction.values[0];
             secimHafizasi.set(interaction.user.id, data);
 
@@ -243,22 +278,20 @@ async function raidSisteminiYonet(interaction) {
                     components: [row] 
                 });
             } else {
-                const gunMenu = new StringSelectMenuBuilder()
-                    .setCustomId('raid_tarih_gun')
-                    .setPlaceholder(data.gun ? `Seçilen Gün: ${data.gun}` : 'Günü Seçin (1-25)...')
-                    .addOptions(gunListesi);
+                const [gunMenu1, gunMenu2] = gunMenuleriniOlustur(data);
 
                 const ayMenu = new StringSelectMenuBuilder()
                     .setCustomId('raid_tarih_ay')
                     .setPlaceholder(data.ay ? `Seçilen Ay: ${ayListesi.find(a=>a.value === data.ay).label}` : 'Ayı Seçin...')
                     .addOptions(ayListesi);
 
-                const row1 = new ActionRowBuilder().addComponents(gunMenu);
-                const row2 = new ActionRowBuilder().addComponents(ayMenu);
+                const row1 = new ActionRowBuilder().addComponents(gunMenu1);
+                const row2 = new ActionRowBuilder().addComponents(gunMenu2);
+                const row3 = new ActionRowBuilder().addComponents(ayMenu);
 
                 return await interaction.update({ 
                     content: '🟥 **Raid Tarihi Belirleme:** Lütfen hem **Gün** hem de **Ay** seçtiğinizden emin olun:', 
-                    components: [row1, row2] 
+                    components: [row1, row2, row3] 
                 });
             }
         }
@@ -305,8 +338,9 @@ async function raidSisteminiYonet(interaction) {
                 .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconclock:1506322705941794967> **TARİH:**\n ${gosterilecekTarih}\n\n<:icondesc:1506323019323150436> **AÇIKLAMA:**\n ${aciklama}`)
                 .addFields(
                     { name: '<:klastanks:1508412246081015970> TANK (0)', value: '⚠️ Kadro Boş', inline: true },
-                    { name: '<:klasheals:1508412311537455205> HEAL (0)', value: '⚠️ Kadro Boş', inline: true },
-                    { name: '<:klasdpss:1508412362099527751> DPS (0)', value: '⚠️ Kadro Boş', inline: true }
+                    { name: '<:klasheals:1508412311537455205> HEALER (0)', value: '⚠️ Kadro Boş', inline: true },
+                    { name: '<:klasdpss:1508412362099527751> DPS (0)', value: '⚠️ Kadro Boş', inline: true },
+                    { name: '📌 YEDEK (0)', value: '⚠️ Yedek Boş', inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
@@ -314,14 +348,15 @@ async function raidSisteminiYonet(interaction) {
             const tankButon = new ButtonBuilder().setCustomId('raid_bas_tank').setLabel('TANK').setEmoji('<:klastanks:1508412246081015970>').setStyle(ButtonStyle.Primary);
             const healerButon = new ButtonBuilder().setCustomId('raid_bas_heal').setLabel('HEALER').setEmoji('<:klasheals:1508412311537455205>').setStyle(ButtonStyle.Success);
             const dpsButon = new ButtonBuilder().setCustomId('raid_bas_dps').setLabel('DPS').setEmoji('<:klasdpss:1508412362099527751>').setStyle(ButtonStyle.Danger);
+            const yedekButon = new ButtonBuilder().setCustomId('raid_bas_yedek').setLabel('YEDEK').setEmoji('📌').setStyle(ButtonStyle.Secondary);
 
-            const row = new ActionRowBuilder().addComponents(tankButon, healerButon, dpsButon);
+            const row = new ActionRowBuilder().addComponents(tankButon, healerButon, dpsButon, yedekButon);
 
             const raidMesaji = await interaction.channel.send({ embeds: [embed], components: [row] });
 
             raidHafizasi.set(raidMesaji.id, {
                 zindan: zindanAdi, tarih: gosterilecekTarih, aciklama: aciklama,
-                tanklar: [], healerlar: [], dpsler: []
+                tanklar: [], healerlar: [], dpsler: [], yedekler: []
             });
 
             try {
@@ -366,19 +401,22 @@ async function raidSisteminiYonet(interaction) {
             const katilimciMetni = `${kullaniciObj.toString()} (${emoji} ${secilenKlasValue})`;
 
             const temizle = (liste) => liste.filter(item => !item.includes(kullaniciObj.toString()));
-            veri.tanklar = temizle(veri.tanklar);
-            veri.healerlar = temizle(veri.healerlar);
-            veri.dpsler = temizle(veri.dpsler);
+            veri.tanklar = temizle(veri.tanklar || []);
+            veri.healerlar = temizle(veri.healerlar || []);
+            veri.dpsler = temizle(veri.dpsler || []);
+            veri.yedekler = temizle(veri.yedekler || []);
 
             if (rol === 'tank') veri.tanklar.push(katilimciMetni);
             if (rol === 'heal') veri.healerlar.push(katilimciMetni);
             if (rol === 'dps') veri.dpsler.push(katilimciMetni);
+            if (rol === 'yedek') veri.yedekler.push(katilimciMetni);
 
             raidHafizasi.set(mesajId, veri);
 
             const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : '⚠️ Kadro Boş';
             const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : '⚠️ Kadro Boş';
             const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : '⚠️ Kadro Boş';
+            const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : '⚠️ Yedek Boş';
 
             const maviTiklanabilirBaslik = `[${veri.zindan.toUpperCase()} RUNU](https://discord.com)`;
 
@@ -389,7 +427,8 @@ async function raidSisteminiYonet(interaction) {
                 .addFields(
                     { name: `<:klastanks:1508412246081015970> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
                     { name: `<:klasheals:1508412311537455205> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
-                    { name: `<:klasdpss:1508412362099527751> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true }
+                    { name: `<:klasdpss:1508412362099527751> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
+                    { name: `📌 YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
