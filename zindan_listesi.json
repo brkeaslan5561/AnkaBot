@@ -1,0 +1,7 @@
+[
+  { "label": "MTIC", "value": "mtic", "roller": ["dps"] },
+  { "label": "MLOMD", "value": "mlomd", "roller": ["dps", "heal", "tank"] },
+  { "label": "MTDS", "value": "mtds", "roller": ["tank", "heal"] },
+  { "label": "MSOD", "value": "msod", "roller": ["tank", "heal", "dps"] },
+  { "label": "MSH", "value": "msh", "roller": ["tank", "heal", "dps"] }
+]

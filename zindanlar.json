@@ -1,0 +1,813 @@
+{
+  "1505908869107548284": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": true
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": true
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505909246984851617": {
+    "oyuncu": "sa",
+    "rol": "dps",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505909748065763434": {
+    "oyuncu": "Dwagne",
+    "rol": "dps",
+    "not": "Hafta sonları runları için dps eksiği var",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505911037809922158": {
+    "oyuncu": "sdfsd",
+    "rol": "dps",
+    "not": "sdfsdf",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": true
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505911578719944774": {
+    "oyuncu": "sdfsdf",
+    "rol": "dps",
+    "not": "dgfhfdghf",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505911710647717950": {
+    "oyuncu": "tfghf",
+    "rol": "dps",
+    "not": "hgfjghj",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505911877203394672": {
+    "oyuncu": "sdfgdsg",
+    "rol": "dps",
+    "not": "hgjghjhg",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": true
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505912218523406346": {
+    "oyuncu": "sdfgsd",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505913821183611001": {
+    "oyuncu": "gfh",
+    "rol": "dps",
+    "not": "fghf",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505913979644543067": {
+    "oyuncu": "dsfgsd",
+    "rol": "dps",
+    "not": "sdfgsdg",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505914554280841247": {
+    "oyuncu": "hhh",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      },
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505914790441386095": {
+    "oyuncu": "sadfsa",
+    "rol": "dps",
+    "not": "seds",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505915409575051395": {
+    "oyuncu": "dfgdgfd",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      },
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505918350402785280": {
+    "oyuncu": "sada",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH (Master Soul Harvester)",
+        "tamamlandi": true
+      },
+      "msod": {
+        "label": "MSOD (Master Soul Harvest)",
+        "tamamlandi": false
+      },
+      "mtic": {
+        "label": "MTIC (Master Imperial Citadel)",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD (Master Lair of the Mad Mage)",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505919028265226252": {
+    "oyuncu": "sss",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": true
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "mtic": {
+        "label": "MTIC",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505919610405392414": {
+    "oyuncu": "sdfgsdgfs",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "mtic": {
+        "label": "MTIC",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505919852194562078": {
+    "oyuncu": "dsfsd",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505921295638990868": {
+    "oyuncu": "MrOwl",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505921895814660096": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "İyi oyuncu yaw",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505922165717860534": {
+    "oyuncu": "NMsdfg",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505922653326676192": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505923423883366501": {
+    "oyuncu": "bertke",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505923639080648824": {
+    "oyuncu": "Mrowl",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505924084087652444": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505924960869421297": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505925171608031253": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505925455948152982": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505925976096247859": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505926211640229978": {
+    "oyuncu": "dsfgsdf",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505926752931938304": {
+    "oyuncu": "MrOwL",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505927426343964793": {
+    "oyuncu": "merje",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505927683824160870": {
+    "oyuncu": "berke",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": true
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505928285345943574": {
+    "oyuncu": "berke",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505928615806632070": {
+    "oyuncu": "sussex",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC",
+        "tamamlandi": true
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505929374791237746": {
+    "oyuncu": "sussex",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mtic": {
+        "label": "MTIC",
+        "tamamlandi": true
+      },
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505929595881259160": {
+    "oyuncu": "MrOwl",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505935401666482267": {
+    "oyuncu": "Berke",
+    "rol": "dps",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1505951957062520937": {
+    "oyuncu": "T Y L A",
+    "rol": "dps",
+    "not": "MTDS eldiveni eksik ekstra cleric için divinity",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": false
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  },
+  "1508402825846194266": {
+    "oyuncu": "Cüneyt / Kara Mehmet",
+    "rol": "tank",
+    "not": "Yok",
+    "zindanlar": {
+      "mlomd": {
+        "label": "MLOMD",
+        "tamamlandi": true
+      },
+      "mtds": {
+        "label": "MTDS",
+        "tamamlandi": true
+      },
+      "msod": {
+        "label": "MSOD",
+        "tamamlandi": false
+      },
+      "msh": {
+        "label": "MSH",
+        "tamamlandi": false
+      }
+    }
+  }
+}

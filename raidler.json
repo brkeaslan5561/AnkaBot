@@ -1,0 +1,42 @@
+{
+  "1505935503336149102": {
+    "baslik": "Master Soul Harvest",
+    "zaman": "26 Nisan 20:00",
+    "aciklama": "Detay belirtilmedi.",
+    "kadro": {
+      "tank": [],
+      "heal": [],
+      "dps": [],
+      "yedek": [],
+      "gelemeyecek": []
+    }
+  },
+  "1505935773747249325": {
+    "baslik": "Msod",
+    "zaman": "22",
+    "aciklama": "Detay belirtilmedi.",
+    "kadro": {
+      "tank": [],
+      "heal": [],
+      "dps": [
+        "BERKE / HEIRONEOUS (Ranger)"
+      ],
+      "yedek": [],
+      "gelemeyecek": []
+    }
+  },
+  "1505936016639398090": {
+    "baslik": "msh",
+    "zaman": "22",
+    "aciklama": "Detay belirtilmedi.",
+    "kadro": {
+      "tank": [],
+      "heal": [],
+      "dps": [],
+      "yedek": [],
+      "gelemeyecek": [
+        "BERKE / HEIRONEOUS"
+      ]
+    }
+  }
+}
