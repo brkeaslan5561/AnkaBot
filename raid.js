@@ -93,13 +93,13 @@ const klasSecenekleri = {
         { label: 'Paladin (Heal)', value: 'Paladin', emoji: '<:klaspaladin:1506316091322929163>' },
         { label: 'Cleric (Heal)', value: 'Cleric', emoji: '<:klascleric:1506315663860568164>' },
         { label: 'Bard (Heal)', value: 'Bard', emoji: '<:klasbard:1506315579521372210>' },
-        { label: 'Warlock (Heal)', value: 'Warlock', emoji: '<:klaswarlock:1506316156796014662>' }
+        { label: 'Warlock (Heal)', value: 'Warlock', emoji: '<:klaswarlock:1511349605466378240>' }
     ],
     dps: [
         { label: 'Barbarian', value: 'Barbarian', emoji: '<:klasbarbar:1506315488073093142>' },
         { label: 'Cleric', value: 'Cleric', emoji: '<:klascleric:1506315663860568164>' },
         { label: 'Fighter', value: 'Fighter', emoji: '<:klasfighter:1506316057407655956>' },
-        { label: 'Warlock', value: 'Warlock', emoji: '<:klaswarlock:1506316156796014662>' },
+        { label: 'Warlock', value: 'Warlock', emoji: '<:klaswarlock:1511349605466378240>' },
         { label: 'Rogue', value: 'Rogue', emoji: '<:klasrogue:1506316128090329099>' },
         { label: 'Wizard', value: 'Wizard', emoji: '<:klaswizard:1506316021664055408>' },
         { label: 'Ranger', value: 'Ranger', emoji: '<:klasranger:1506315982912753694>' },
@@ -111,7 +111,7 @@ const klasSecenekleri = {
         { label: 'Barbarian', value: 'Barbarian', emoji: '<:klasbarbar:1506315488073093142>' },
         { label: 'Cleric', value: 'Cleric', emoji: '<:klascleric:1506315663860568164>' },
         { label: 'Bard', value: 'Bard', emoji: '<:klasbard:1506315579521372210>' },
-        { label: 'Warlock', value: 'Warlock', emoji: '<:klaswarlock:1506316156796014662>' },
+        { label: 'Warlock', value: 'Warlock', emoji: '<:klaswarlock:1511349605466378240>' },
         { label: 'Rogue', value: 'Rogue', emoji: '<:klasrogue:1506316128090329099>' },
         { label: 'Wizard', value: 'Wizard', emoji: '<:klaswizard:1506316021664055408>' },
         { label: 'Ranger', value: 'Ranger', emoji: '<:klasranger:1506315982912753694>' }
@@ -176,21 +176,21 @@ async function raidManuelOyuncuEkle(interaction) {
 
     raidHafizasi.set(mesajId, veri);
 
-    const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : '⚠️ Kadro Boş';
-    const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : '⚠️ Kadro Boş';
-    const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : '⚠️ Kadro Boş';
-    const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : '⚠️ Yedek Boş';
+    const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : 'Boş';
+    const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : 'Boş';
+    const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : 'Boş';
+    const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : 'Boş';
 
     const maviTiklanabilirBaslik = `[${veri.zindan.toUpperCase()} RUNU](https://discord.com)`;
 
     const guncelEmbed = new EmbedBuilder()
         .setColor('#0099ff')
         .setTitle('ASHES OF ANKA RAID OLUŞTURUCU')
-        .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconclock:1506322705941794967> **TARİH:**\n ${veri.tarih}\n\n<:icondesc:1506323019323150436> **AÇIKLAMA:**\n ${veri.aciklama}`)
+        .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${veri.tarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${veri.aciklama}`)
         .addFields(
-            { name: `<:klastanks:1508412246081015970> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
-            { name: `<:klasheals:1508412311537455205> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
-            { name: `<:klasdpss:1508412362099527751> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
+            { name: `<:icontank:1511342553457492038> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
+            { name: `<:iconheal:1511342753915732150> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
+            { name: `<:icondps:1511342631043727613> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
             { name: `📌 YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
         )
         .setTimestamp()
@@ -208,8 +208,8 @@ async function raidManuelOyuncuEkle(interaction) {
                 .setDescription(`Merhaba, **Ashes of Anka** yönetimi tarafından bir raide manuel olarak kaydedildiniz.`)
                 .addFields(
                     { name: '🟥 ZİNDAN', value: veri.zindan.toUpperCase(), inline: true },
-                    { name: '<:icondesc:1506323019323150436> ROL / KLAS', value: `${rol.toUpperCase()} (${secilenKlasValue})`, inline: true },
-                    { name: '<:iconclock:1506322705941794967> TARİH', value: veri.tarih, inline: false }
+                    { name: '<:iconinfo:1511342488261230613> ROL / KLAS', value: `${rol.toUpperCase()} (${secilenKlasValue})`, inline: true },
+                    { name: '<:iconsaat:1511342684986408970> TARİH', value: veri.tarih, inline: false }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Ashes of Anka Raid Yönetimi' });
@@ -335,19 +335,19 @@ async function raidSisteminiYonet(interaction) {
             const embed = new EmbedBuilder()
                 .setColor('#0099ff')
                 .setTitle('ASHES OF ANKA RAID OLUŞTURUCU')
-                .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconclock:1506322705941794967> **TARİH:**\n ${gosterilecekTarih}\n\n<:icondesc:1506323019323150436> **AÇIKLAMA:**\n ${aciklama}`)
+                .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${gosterilecekTarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${aciklama}`)
                 .addFields(
-                    { name: '<:klastanks:1508412246081015970> TANK (0)', value: '⚠️ Kadro Boş', inline: true },
-                    { name: '<:klasheals:1508412311537455205> HEALER (0)', value: '⚠️ Kadro Boş', inline: true },
-                    { name: '<:klasdpss:1508412362099527751> DPS (0)', value: '⚠️ Kadro Boş', inline: true },
-                    { name: '📌 YEDEK (0)', value: '⚠️ Yedek Boş', inline: true }
+                    { name: '<:icontank:1511342553457492038> TANK (0)', value: 'Boş', inline: true },
+                    { name: '<:iconheal:1511342753915732150> HEALER (0)', value: 'Boş', inline: true },
+                    { name: '<:icondps:1511342631043727613> DPS (0)', value: 'Boş', inline: true },
+                    { name: '📌 YEDEK (0)', value: 'Boş', inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
 
-            const tankButon = new ButtonBuilder().setCustomId('raid_bas_tank').setLabel('TANK').setEmoji('<:klastanks:1508412246081015970>').setStyle(ButtonStyle.Primary);
-            const healerButon = new ButtonBuilder().setCustomId('raid_bas_heal').setLabel('HEALER').setEmoji('<:klasheals:1508412311537455205>').setStyle(ButtonStyle.Success);
-            const dpsButon = new ButtonBuilder().setCustomId('raid_bas_dps').setLabel('DPS').setEmoji('<:klasdpss:1508412362099527751>').setStyle(ButtonStyle.Danger);
+            const tankButon = new ButtonBuilder().setCustomId('raid_bas_tank').setLabel('TANK').setEmoji('<:icontank:1511342553457492038>').setStyle(ButtonStyle.Primary);
+            const healerButon = new ButtonBuilder().setCustomId('raid_bas_heal').setLabel('HEALER').setEmoji('<:iconheal:1511342753915732150>').setStyle(ButtonStyle.Success);
+            const dpsButon = new ButtonBuilder().setCustomId('raid_bas_dps').setLabel('DPS').setEmoji('<:icondps:1511342631043727613>').setStyle(ButtonStyle.Danger);
             const yedekButon = new ButtonBuilder().setCustomId('raid_bas_yedek').setLabel('YEDEK').setEmoji('📌').setStyle(ButtonStyle.Secondary);
 
             const row = new ActionRowBuilder().addComponents(tankButon, healerButon, dpsButon, yedekButon);
@@ -380,7 +380,7 @@ async function raidSisteminiYonet(interaction) {
                 .addOptions(klasSecenekleri[rol]);
 
             const row = new ActionRowBuilder().addComponents(klasMenu);
-            return await interaction.reply({ content: `🎭 **Sınıf Seçimi:** Lütfen katıldığınız **${rol.toUpperCase()}** klasını seçin:`, components: [row], flags: [64] });
+            return await interaction.reply({ content: `**KLAS SEÇİMİ:** Lütfen katıldığınız **${rol.toUpperCase()}** klasını seçin:`, components: [row], flags: [64] });
         }
 
         if (interaction.isStringSelectMenu() && interaction.customId.startsWith('raid_klas_secim_')) {
@@ -413,21 +413,21 @@ async function raidSisteminiYonet(interaction) {
 
             raidHafizasi.set(mesajId, veri);
 
-            const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : '⚠️ Kadro Boş';
-            const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : '⚠️ Kadro Boş';
-            const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : '⚠️ Kadro Boş';
-            const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : '⚠️ Yedek Boş';
+            const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : 'Boş';
+            const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : 'Boş';
+            const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : 'Boş';
+            const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : 'Boş';
 
             const maviTiklanabilirBaslik = `[${veri.zindan.toUpperCase()} RUNU](https://discord.com)`;
 
             const guncelEmbed = new EmbedBuilder()
                 .setColor('#0099ff')
                 .setTitle('ASHES OF ANKA RAID OLUŞTURUCU')
-                .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconclock:1506322705941794967> **TARİH:**\n ${veri.tarih}\n\n<:icondesc:1506323019323150436> **AÇIKLAMA:**\n ${veri.aciklama}`)
+                .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${veri.tarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${veri.aciklama}`)
                 .addFields(
-                    { name: `<:klastanks:1508412246081015970> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
-                    { name: `<:klasheals:1508412311537455205> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
-                    { name: `<:klasdpss:1508412362099527751> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
+                    { name: `<:icontank:1511342553457492038> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
+                    { name: `<:iconheal:1511342753915732150> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
+                    { name: `<:icondps:1511342631043727613> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
                     { name: `📌 YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
                 )
                 .setTimestamp()
