@@ -191,7 +191,7 @@ async function raidManuelOyuncuEkle(interaction) {
             { name: `<:icontank:1511342553457492038> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
             { name: `<:iconheal:1511342753915732150> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
             { name: `<:icondps:1511342631043727613> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
-            { name: `📌 YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
+            { name: `<:iconyedek:1511353056392904734> YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
         )
         .setTimestamp()
         .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
@@ -340,7 +340,7 @@ async function raidSisteminiYonet(interaction) {
                     { name: '<:icontank:1511342553457492038> TANK (0)', value: 'Boş', inline: true },
                     { name: '<:iconheal:1511342753915732150> HEALER (0)', value: 'Boş', inline: true },
                     { name: '<:icondps:1511342631043727613> DPS (0)', value: 'Boş', inline: true },
-                    { name: '📌 YEDEK (0)', value: 'Boş', inline: true }
+                    { name: '<:iconyedek:1511353056392904734> YEDEK (0)', value: 'Boş', inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
@@ -348,7 +348,7 @@ async function raidSisteminiYonet(interaction) {
             const tankButon = new ButtonBuilder().setCustomId('raid_bas_tank').setLabel('TANK').setEmoji('<:icontank:1511342553457492038>').setStyle(ButtonStyle.Primary);
             const healerButon = new ButtonBuilder().setCustomId('raid_bas_heal').setLabel('HEALER').setEmoji('<:iconheal:1511342753915732150>').setStyle(ButtonStyle.Success);
             const dpsButon = new ButtonBuilder().setCustomId('raid_bas_dps').setLabel('DPS').setEmoji('<:icondps:1511342631043727613>').setStyle(ButtonStyle.Danger);
-            const yedekButon = new ButtonBuilder().setCustomId('raid_bas_yedek').setLabel('YEDEK').setEmoji('📌').setStyle(ButtonStyle.Secondary);
+            const yedekButon = new ButtonBuilder().setCustomId('raid_bas_yedek').setLabel('YEDEK').setEmoji('<:iconyedek:1511353056392904734>').setStyle(ButtonStyle.Secondary);
 
             const row = new ActionRowBuilder().addComponents(tankButon, healerButon, dpsButon, yedekButon);
 
