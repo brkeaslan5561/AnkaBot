@@ -428,7 +428,7 @@ async function raidSisteminiYonet(interaction) {
                     { name: `<:icontank:1511342553457492038> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
                     { name: `<:iconheal:1511342753915732150> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
                     { name: `<:icondps:1511342631043727613> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
-                    { name: `📌 YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
+                    { name: `<:iconyedek:1511353056392904734> YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
