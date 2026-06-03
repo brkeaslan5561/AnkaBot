@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, Mo
 const { REST } = require('@discordjs/rest');
 const config = require('./config.json');
 const fs = require('fs');
-const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidAutocompleteYonet, raidManuelOyuncuEkle } = require('./raid.js');
+const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle } = require('./raid.js');
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
@@ -35,7 +35,8 @@ const commands = [
         .setDescription('Oyuncuların zindan ve ekipman ihtiyaçlarını listeler.'),
 
     raidKomutu,
-    raidOyuncuEkleKomutu // <-- ESKİ KODLARA DOKUNMADAN SADECE BU SATIRI EKLEYİN
+    raidOyuncuEkleKomutu,
+    raidDuzenleKomutu
 ].map(command => command.toJSON());
 
 const userSessions = new Map();
@@ -75,13 +76,18 @@ client.once('clientReady', async () => {
 client.on('interactionCreate', async interaction => {
 
    // --- YENİ AUTOCOMPLETE DİNLEYİCİSİ ---
-    if (interaction.isAutocomplete() && interaction.commandName === 'raid-oyuncu-ekle') {
+    if (interaction.isAutocomplete() && (interaction.commandName === 'raid-oyuncu-ekle' || interaction.commandName === 'düzenle')) {
         return await raidAutocompleteYonet(interaction);
     }
 
     // --- YENİ MANUEL EKLEME SLASH KOMUTU YÖNLENDİRMESİ ---
     if (interaction.isChatInputCommand() && interaction.commandName === 'raid-oyuncu-ekle') {
         return await raidManuelOyuncuEkle(interaction);
+    }
+
+    // --- RAID DÜZENLEME SLASH KOMUTU YÖNLENDİRMESİ ---
+    if (interaction.isChatInputCommand() && interaction.commandName === 'düzenle') {
+        return await raidDuzenleKomutuYonet(interaction);
     }
     //----------------------------------------------------
     // RAID SİSTEMİ YÖNLENDİRMESİ (TÜM ETKİLEŞİMLERİ KAPSAYACAK ŞEKİLDE DÜZELTİLDİ)
