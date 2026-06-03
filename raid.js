@@ -1,4 +1,222 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+
+const ISTANBUL_UTC_OFFSET_HOURS = 3;
+
+function istanbulTimestampOlustur(gun, ay, saat) {
+    const [saatSayisi, dakikaSayisi] = saat.split(':').map(Number);
+    return Math.floor(Date.UTC(2026, Number(ay), Number(gun), saatSayisi - ISTANBUL_UTC_OFFSET_HOURS, dakikaSayisi) / 1000);
+}
+
+function istanbulParcalariAl(unixZamani) {
+    const tarih = new Date((Number(unixZamani) + ISTANBUL_UTC_OFFSET_HOURS * 60 * 60) * 1000);
+    const saat = String(tarih.getUTCHours()).padStart(2, '0');
+    const dakika = String(tarih.getUTCMinutes()).padStart(2, '0');
+
+    return {
+        gun: tarih.getUTCDate(),
+        ay: tarih.getUTCMonth(),
+        saat: `${saat}:${dakika}`
+    };
+}
+
+function discordTarihMetniOlustur(unixZamani) {
+    return `<t:${unixZamani}:F> (<t:${unixZamani}:R>)`;
+}
+
+function tumKlasSecenekleriniAl() {
+    return Object.values(klasSecenekleri).flat();
+}
+
+function klasEmojisiBul(klas) {
+    if (!klas) return '🔹';
+
+    const klasLower = String(klas).toLowerCase();
+    const bulunan = tumKlasSecenekleriniAl().find(k =>
+        k.value.toLowerCase() === klasLower ||
+        k.label.toLowerCase().includes(klasLower)
+    );
+
+    return bulunan ? bulunan.emoji : '🔹';
+}
+
+function eskiKatilimciMetniniKaydaCevir(kayit, sira) {
+    const metin = String(kayit || '').trim();
+    const idEslesme = metin.match(/<@!?(\d+)>/);
+    const mentionEslesme = metin.match(/<@!?\d+>/);
+    const parantezEslesme = metin.match(/\((.*?)\)/);
+    const parantezIci = parantezEslesme ? parantezEslesme[1] : '';
+    const emojiEslesme = parantezIci.match(/<a?:[^>]+>/);
+    const emoji = emojiEslesme ? emojiEslesme[0] : '🔹';
+    const klas = parantezIci.replace(/<a?:[^>]+>/g, '').trim();
+
+    return {
+        userId: idEslesme ? idEslesme[1] : null,
+        mention: mentionEslesme ? mentionEslesme[0] : metin.replace(/\s*\([^)]*\)/g, ''),
+        klas: klas || null,
+        klasEmoji: emoji,
+        sira
+    };
+}
+
+function katilimciKaydiniNormalizeEt(kayit, varsayilanSira) {
+    if (kayit && typeof kayit === 'object' && !Array.isArray(kayit)) {
+        const sira = Number(kayit.sira || kayit.kayitSirasi || kayit.order || varsayilanSira);
+        const klas = kayit.klas || kayit.class || null;
+        const klasEmoji = kayit.klasEmoji || kayit.emoji || klasEmojisiBul(klas);
+        const userId = kayit.userId ? String(kayit.userId) : null;
+
+        return {
+            userId,
+            mention: kayit.mention || (userId ? `<@${userId}>` : 'Bilinmeyen oyuncu'),
+            klas,
+            klasEmoji,
+            sira
+        };
+    }
+
+    return eskiKatilimciMetniniKaydaCevir(kayit, varsayilanSira);
+}
+
+function raidVerisiniNormalizeEt(veri) {
+    const rolListeleri = ['tanklar', 'healerlar', 'dpsler', 'yedekler'];
+    let siradakiVarsayilan = 1;
+    let enYuksekSira = 0;
+
+    for (const listeAdi of rolListeleri) {
+        const liste = Array.isArray(veri[listeAdi]) ? veri[listeAdi] : [];
+
+        veri[listeAdi] = liste.map(kayit => {
+            const normalizeKayit = katilimciKaydiniNormalizeEt(kayit, siradakiVarsayilan);
+            const sira = Number(normalizeKayit.sira) || siradakiVarsayilan;
+
+            normalizeKayit.sira = sira;
+            enYuksekSira = Math.max(enYuksekSira, sira);
+            siradakiVarsayilan = Math.max(siradakiVarsayilan + 1, enYuksekSira + 1);
+
+            return normalizeKayit;
+        });
+    }
+
+    veri.siradakiSira = Math.max(Number(veri.siradakiSira) || 1, enYuksekSira + 1);
+    return veri;
+}
+
+function katilimciKullaniciIdAl(kayit) {
+    if (kayit && typeof kayit === 'object' && kayit.userId) return String(kayit.userId);
+
+    const idEslesme = String(kayit || '').match(/<@!?(\d+)>/);
+    return idEslesme ? idEslesme[1] : null;
+}
+
+function katilimciKullaniciMi(kayit, kullaniciObj) {
+    const userId = katilimciKullaniciIdAl(kayit);
+    if (userId) return userId === kullaniciObj.id;
+
+    return String(kayit || '').includes(kullaniciObj.toString());
+}
+
+function katilimciKaydiOlustur(veri, kullaniciObj, secilenKlasValue, emoji, mevcutKayit = null) {
+    const sira = mevcutKayit && mevcutKayit.sira
+        ? Number(mevcutKayit.sira)
+        : Number(veri.siradakiSira || 1);
+
+    if (!mevcutKayit || !mevcutKayit.sira) {
+        veri.siradakiSira = sira + 1;
+    }
+
+    return {
+        userId: kullaniciObj.id,
+        mention: kullaniciObj.toString(),
+        klas: secilenKlasValue,
+        klasEmoji: emoji || klasEmojisiBul(secilenKlasValue),
+        sira
+    };
+}
+
+function katilimciSatiriniOlustur(kayit) {
+    const normalizeKayit = katilimciKaydiniNormalizeEt(kayit, '?');
+    const emoji = normalizeKayit.klasEmoji || klasEmojisiBul(normalizeKayit.klas);
+    const sira = normalizeKayit.sira || '?';
+    const mention = normalizeKayit.mention || (normalizeKayit.userId ? `<@${normalizeKayit.userId}>` : 'Bilinmeyen oyuncu');
+
+    return `${emoji} **${sira}** ${mention}`;
+}
+
+function katilimciListesiMetniOlustur(liste) {
+    if (!Array.isArray(liste) || liste.length === 0) return 'Boş';
+
+    return [...liste]
+        .sort((a, b) => (Number(a.sira) || 9999) - (Number(b.sira) || 9999))
+        .map(katilimciSatiriniOlustur)
+        .join('\n');
+}
+
+function raidKatilimMetinleriniAl(veri) {
+    raidVerisiniNormalizeEt(veri);
+
+    return {
+        tankMetin: katilimciListesiMetniOlustur(veri.tanklar),
+        healMetin: katilimciListesiMetniOlustur(veri.healerlar),
+        dpsMetin: katilimciListesiMetniOlustur(veri.dpsler),
+        yedekMetin: katilimciListesiMetniOlustur(veri.yedekler)
+    };
+}
+
+function kullaniciyiTumRollerdenCikar(veri, kullaniciObj) {
+    const rolListeleri = ['tanklar', 'healerlar', 'dpsler', 'yedekler'];
+    let bulunanKayit = null;
+
+    for (const listeAdi of rolListeleri) {
+        const eskiListe = Array.isArray(veri[listeAdi]) ? veri[listeAdi] : [];
+        const yeniListe = [];
+
+        for (const kayit of eskiListe) {
+            if (katilimciKullaniciMi(kayit, kullaniciObj)) {
+                bulunanKayit = katilimciKaydiniNormalizeEt(kayit, Number(veri.siradakiSira || 1));
+            } else {
+                yeniListe.push(kayit);
+            }
+        }
+
+        veri[listeAdi] = yeniListe;
+    }
+
+    return bulunanKayit;
+}
+
+function raidEmbedOlustur(veri) {
+    const { tankMetin, healMetin, dpsMetin, yedekMetin } = raidKatilimMetinleriniAl(veri);
+    const maviTiklanabilirBaslik = `[${veri.zindan.toUpperCase()} RUNU](https://discord.com)`;
+
+    return new EmbedBuilder()
+        .setColor('#0099ff')
+        .setTitle('ASHES OF ANKA RAID OLUŞTURUCU')
+        .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${veri.tarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${veri.aciklama}`)
+        .addFields(
+            { name: `<:icontank:1511342553457492038> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
+            { name: `<:iconheal:1511342753915732150> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
+            { name: `<:icondps:1511342631043727613> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
+            { name: `<:iconyedek:1511353056392904734> YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
+}
+
+function raidButonSatiriOlustur() {
+    const tankButon = new ButtonBuilder().setCustomId('raid_bas_tank').setLabel('TANK').setEmoji('<:icontank:1511342553457492038>').setStyle(ButtonStyle.Primary);
+    const healerButon = new ButtonBuilder().setCustomId('raid_bas_heal').setLabel('HEALER').setEmoji('<:iconheal:1511342753915732150>').setStyle(ButtonStyle.Success);
+    const dpsButon = new ButtonBuilder().setCustomId('raid_bas_dps').setLabel('DPS').setEmoji('<:icondps:1511342631043727613>').setStyle(ButtonStyle.Danger);
+    const yedekButon = new ButtonBuilder().setCustomId('raid_bas_yedek').setLabel('YEDEK').setEmoji('<:iconyedek:1511353056392904734>').setStyle(ButtonStyle.Secondary);
+    const cikisButon = new ButtonBuilder().setCustomId('raid_cikis').setLabel('ÇIKIŞ').setEmoji('<:iconexit:1511665613725106286>').setStyle(ButtonStyle.Secondary);
+
+    return new ActionRowBuilder().addComponents(tankButon, healerButon, dpsButon, yedekButon, cikisButon);
+}
+
+function saatFormatiniKontrolEt(saat) {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(saat);
+}
 
 const raidKomutu = new SlashCommandBuilder()
     .setName('raid-oluştur')
@@ -34,6 +252,40 @@ const raidOyuncuEkleKomutu = new SlashCommandBuilder()
         option.setName('klas')
             .setDescription('Oyuncunun sınıfını yazın veya seçin (Örn: Paladin, Wizard, Cleric).')
             .setRequired(true)
+    );
+
+const raidDuzenleKomutu = new SlashCommandBuilder()
+    .setName('düzenle')
+    .setDescription('Oluşturulan bir raid kartının gün, ay, saat veya açıklamasını düzenler.')
+    .addStringOption(option =>
+        option.setName('id')
+            .setDescription('Düzenlenecek Raid ID bilgisini seçin.')
+            .setRequired(true)
+            .setAutocomplete(true)
+    )
+    .addIntegerOption(option =>
+        option.setName('gun')
+            .setDescription('Yeni gün. Örn: 4')
+            .setMinValue(1)
+            .setMaxValue(31)
+            .setRequired(false)
+    )
+    .addIntegerOption(option =>
+        option.setName('ay')
+            .setDescription('Yeni ay. Örn: Haziran için 6')
+            .setMinValue(1)
+            .setMaxValue(12)
+            .setRequired(false)
+    )
+    .addStringOption(option =>
+        option.setName('saat')
+            .setDescription('Yeni saat. Örn: 21:30')
+            .setRequired(false)
+    )
+    .addStringOption(option =>
+        option.setName('aciklama')
+            .setDescription('Yeni açıklama / yönetici notu')
+            .setRequired(false)
     );
 
 const zindanListesi = [
@@ -118,8 +370,84 @@ const klasSecenekleri = {
     ]
 };
 
+const RAID_DATA_DOSYASI = path.join(__dirname, 'raid_data.json');
 const raidHafizasi = new Map();
 const secimHafizasi = new Map();
+
+function bosRaidVerisiniOlustur() {
+    return {
+        raids: {}
+    };
+}
+
+function raidVerileriniDisktenYukle() {
+    try {
+        if (!fs.existsSync(RAID_DATA_DOSYASI)) {
+            fs.writeFileSync(RAID_DATA_DOSYASI, JSON.stringify(bosRaidVerisiniOlustur(), null, 2), 'utf8');
+            return;
+        }
+
+        const hamVeri = fs.readFileSync(RAID_DATA_DOSYASI, 'utf8').trim();
+        if (!hamVeri) return;
+
+        const json = JSON.parse(hamVeri);
+        const raids = Array.isArray(json) ? Object.fromEntries(json) : (json.raids || json);
+
+        for (const [mesajId, veri] of Object.entries(raids)) {
+            if (!mesajId || !veri || typeof veri !== 'object') continue;
+
+            raidHafizasi.set(mesajId, raidVerisiniNormalizeEt({
+                ...veri,
+                tanklar: Array.isArray(veri.tanklar) ? veri.tanklar : [],
+                healerlar: Array.isArray(veri.healerlar) ? veri.healerlar : [],
+                dpsler: Array.isArray(veri.dpsler) ? veri.dpsler : [],
+                yedekler: Array.isArray(veri.yedekler) ? veri.yedekler : []
+            }));
+        }
+
+        console.log(`✅ ${raidHafizasi.size} raid kaydı diskten yüklendi.`);
+    } catch (error) {
+        console.error('Raid verileri diskten yüklenirken hata oluştu:', error);
+    }
+}
+
+function raidVerileriniDiskeKaydet() {
+    try {
+        const raids = Object.fromEntries(raidHafizasi.entries());
+        const geciciDosya = `${RAID_DATA_DOSYASI}.tmp`;
+
+        fs.writeFileSync(geciciDosya, JSON.stringify({ raids }, null, 2), 'utf8');
+        fs.renameSync(geciciDosya, RAID_DATA_DOSYASI);
+    } catch (error) {
+        console.error('Raid verileri diske kaydedilirken hata oluştu:', error);
+    }
+}
+
+function raidVerisiniKaydet(mesajId, veri) {
+    raidHafizasi.set(mesajId, raidVerisiniNormalizeEt(veri));
+    raidVerileriniDiskeKaydet();
+}
+
+async function raidMesajiniGetir(interaction, mesajId, veri = {}) {
+    const kanallar = [];
+
+    if (veri.channelId) kanallar.push(veri.channelId);
+    if (interaction.channelId && !kanallar.includes(interaction.channelId)) kanallar.push(interaction.channelId);
+
+    for (const kanalId of kanallar) {
+        try {
+            const kanal = await interaction.client.channels.fetch(kanalId);
+            if (!kanal || !kanal.messages) continue;
+            return await kanal.messages.fetch(mesajId);
+        } catch (error) {
+            // Bir sonraki kanal ihtimalini dene.
+        }
+    }
+
+    throw new Error('Raid mesajı bulunamadı.');
+}
+
+raidVerileriniDisktenYukle();
 
 // --- YENİ AUTOCOMPLETE MANTIĞI (GÖRSELDEKİ LİSTELEME) ---
 async function raidAutocompleteYonet(interaction) {
@@ -129,8 +457,10 @@ async function raidAutocompleteYonet(interaction) {
     const secenekler = [];
 
     for (const [mesajId, veri] of raidHafizasi.entries()) {
-        const temizTarih = veri.tarih.replace(/<[^>]*>/g, '').trim() || "Bilinmeyen Tarih";
-        const labelText = `${mesajId} | ${temizTarih} | ${veri.zindan.toUpperCase()}`;
+        const tarihEtiketi = veri.gun && veri.ay !== undefined && veri.saat
+            ? `${veri.gun}/${Number(veri.ay) + 1} ${veri.saat}`
+            : 'Bilinmeyen Tarih';
+        const labelText = `${mesajId} | ${tarihEtiketi} | ${veri.zindan.toUpperCase()}`;
 
         if (!focusedValue || labelText.toLowerCase().includes(focusedValue)) {
             secenekler.push({
@@ -161,44 +491,22 @@ async function raidManuelOyuncuEkle(interaction) {
     const klasBul = klasSecenekleri[rol].find(k => k.value.toLowerCase() === secilenKlasValue.toLowerCase() || k.label.toLowerCase().includes(secilenKlasValue.toLowerCase()));
     const emoji = klasBul ? klasBul.emoji : '🔹';
     
-    const katilimciMetni = `${kullaniciObj.toString()} (${emoji} ${secilenKlasValue})`;
+    raidVerisiniNormalizeEt(veri);
+    const mevcutKayit = kullaniciyiTumRollerdenCikar(veri, kullaniciObj);
+    const katilimciKaydi = katilimciKaydiOlustur(veri, kullaniciObj, secilenKlasValue, emoji, mevcutKayit);
 
-    const temizle = (liste) => liste.filter(item => !item.includes(kullaniciObj.toString()));
-    veri.tanklar = temizle(veri.tanklar || []);
-    veri.healerlar = temizle(veri.healerlar || []);
-    veri.dpsler = temizle(veri.dpsler || []);
-    veri.yedekler = temizle(veri.yedekler || []);
+    if (rol === 'tank') veri.tanklar.push(katilimciKaydi);
+    if (rol === 'heal') veri.healerlar.push(katilimciKaydi);
+    if (rol === 'dps') veri.dpsler.push(katilimciKaydi);
+    if (rol === 'yedek') veri.yedekler.push(katilimciKaydi);
 
-    if (rol === 'tank') veri.tanklar.push(katilimciMetni);
-    if (rol === 'heal') veri.healerlar.push(katilimciMetni);
-    if (rol === 'dps') veri.dpsler.push(katilimciMetni);
-    if (rol === 'yedek') veri.yedekler.push(katilimciMetni);
+    raidVerisiniKaydet(mesajId, veri);
 
-    raidHafizasi.set(mesajId, veri);
-
-    const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : 'Boş';
-    const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : 'Boş';
-    const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : 'Boş';
-    const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : 'Boş';
-
-    const maviTiklanabilirBaslik = `[${veri.zindan.toUpperCase()} RUNU](https://discord.com)`;
-
-    const guncelEmbed = new EmbedBuilder()
-        .setColor('#0099ff')
-        .setTitle('ASHES OF ANKA RAID OLUŞTURUCU')
-        .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${veri.tarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${veri.aciklama}`)
-        .addFields(
-            { name: `<:icontank:1511342553457492038> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
-            { name: `<:iconheal:1511342753915732150> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
-            { name: `<:icondps:1511342631043727613> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
-            { name: `<:iconyedek:1511353056392904734> YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
-        )
-        .setTimestamp()
-        .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
+    const guncelEmbed = raidEmbedOlustur(veri);
 
     try {
-        const anaMesaj = await interaction.channel.messages.fetch(mesajId);
-        await anaMesaj.edit({ embeds: [guncelEmbed] });
+        const anaMesaj = await raidMesajiniGetir(interaction, mesajId, veri);
+        await anaMesaj.edit({ embeds: [guncelEmbed], components: [raidButonSatiriOlustur()] });
 
         // DM Bildirimi Gönderme
         try {
@@ -224,6 +532,72 @@ async function raidManuelOyuncuEkle(interaction) {
     } catch (error) {
         console.error(error);
         return await interaction.editReply({ content: '❌ Oyuncu eklenirken bir hata oluştu. Lütfen doğru kanalda olduğunuzdan emin olun.' });
+    }
+}
+
+// --- RAID DÜZENLEME KOMUTU ---
+async function raidDuzenleKomutuYonet(interaction) {
+    await interaction.deferReply({ flags: [64] });
+
+    const mesajId = interaction.options.getString('id');
+    const veri = raidHafizasi.get(mesajId);
+
+    if (!veri) {
+        return await interaction.editReply({ content: '❌ Bu raid kartının verisi bulunamadı veya bot yeniden başlatıldığı için hafızadan silinmiş olabilir.' });
+    }
+
+    const yeniGun = interaction.options.getInteger('gun');
+    const yeniAy = interaction.options.getInteger('ay');
+    const yeniSaat = interaction.options.getString('saat');
+    const yeniAciklama = interaction.options.getString('aciklama');
+
+    const tarihDegisecek = yeniGun !== null || yeniAy !== null || yeniSaat !== null;
+    const aciklamaDegisecek = yeniAciklama !== null;
+
+    if (!tarihDegisecek && !aciklamaDegisecek) {
+        return await interaction.editReply({ content: '❌ Düzenlemek için en az bir alan girmelisiniz: gün, ay, saat veya açıklama.' });
+    }
+
+    if (yeniSaat !== null && !saatFormatiniKontrolEt(yeniSaat)) {
+        return await interaction.editReply({ content: '❌ Saat formatı hatalı. Lütfen `21:30` gibi HH:MM formatında yazın.' });
+    }
+
+    if (tarihDegisecek) {
+        if ((veri.gun === undefined || veri.ay === undefined || veri.saat === undefined) && (yeniGun === null || yeniAy === null || yeniSaat === null)) {
+            return await interaction.editReply({ content: '❌ Bu raid eski formatta oluşturulmuş. Tarihi düzenlemek için gün, ay ve saat alanlarının üçünü de girmeniz gerekiyor.' });
+        }
+
+        const gun = yeniGun !== null ? yeniGun : Number(veri.gun);
+        const ay = yeniAy !== null ? yeniAy - 1 : Number(veri.ay);
+        const saat = yeniSaat !== null ? yeniSaat : veri.saat;
+
+        const unixZamani = istanbulTimestampOlustur(gun, ay, saat);
+        const kontrol = istanbulParcalariAl(unixZamani);
+
+        if (kontrol.gun !== Number(gun) || kontrol.ay !== Number(ay) || kontrol.saat !== saat) {
+            return await interaction.editReply({ content: '❌ Geçersiz tarih girdiniz. Örneğin 31 Şubat gibi bir tarih kullanılamaz.' });
+        }
+
+        veri.gun = String(gun);
+        veri.ay = String(ay);
+        veri.saat = saat;
+        veri.unixZamani = unixZamani;
+        veri.tarih = discordTarihMetniOlustur(unixZamani);
+    }
+
+    if (aciklamaDegisecek) {
+        veri.aciklama = yeniAciklama.trim() || 'Herhangi bir açıklama girilmedi.';
+    }
+
+    raidVerisiniKaydet(mesajId, veri);
+
+    try {
+        const anaMesaj = await raidMesajiniGetir(interaction, mesajId, veri);
+        await anaMesaj.edit({ embeds: [raidEmbedOlustur(veri)], components: [raidButonSatiriOlustur()] });
+        return await interaction.editReply({ content: `✅ **${veri.zindan.toUpperCase()}** raid kartı başarıyla güncellendi.` });
+    } catch (error) {
+        console.error(error);
+        return await interaction.editReply({ content: '❌ Raid kartı güncellenemedi. Komutu raid mesajının bulunduğu kanalda kullandığınızdan emin olun.' });
     }
 }
 
@@ -325,39 +699,32 @@ async function raidSisteminiYonet(interaction) {
             const zindanBul = zindanListesi.find(z => z.value === data.zindan);
             const zindanAdi = zindanBul ? zindanBul.label : data.zindan;
 
-            const [saat, dakika] = data.saat.split(':').map(Number);
-            const hedefTarih = new Date(2026, Number(data.ay), Number(data.gun), saat, dakika);
-            const unixZamani = Math.floor(hedefTarih.getTime() / 1000);
-            const gosterilecekTarih = `<t:${unixZamani}:F> (<t:${unixZamani}:R>)`;
+            const unixZamani = istanbulTimestampOlustur(data.gun, data.ay, data.saat);
+            const gosterilecekTarih = discordTarihMetniOlustur(unixZamani);
 
-            const maviTiklanabilirBaslik = `[${zindanAdi.toUpperCase()} RUNU](https://discord.com)`;
+            const raidVerisi = {
+                zindan: zindanAdi,
+                tarih: gosterilecekTarih,
+                aciklama: aciklama,
+                gun: String(data.gun),
+                ay: String(data.ay),
+                saat: data.saat,
+                unixZamani: unixZamani,
+                channelId: interaction.channelId,
+                guildId: interaction.guildId,
+                tanklar: [],
+                healerlar: [],
+                dpsler: [],
+                yedekler: [],
+                siradakiSira: 1
+            };
 
-            const embed = new EmbedBuilder()
-                .setColor('#0099ff')
-                .setTitle('ASHES OF ANKA RAID OLUŞTURUCU')
-                .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${gosterilecekTarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${aciklama}`)
-                .addFields(
-                    { name: '<:icontank:1511342553457492038> TANK (0)', value: 'Boş', inline: true },
-                    { name: '<:iconheal:1511342753915732150> HEALER (0)', value: 'Boş', inline: true },
-                    { name: '<:icondps:1511342631043727613> DPS (0)', value: 'Boş', inline: true },
-                    { name: '<:iconyedek:1511353056392904734> YEDEK (0)', value: 'Boş', inline: true }
-                )
-                .setTimestamp()
-                .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
-
-            const tankButon = new ButtonBuilder().setCustomId('raid_bas_tank').setLabel('TANK').setEmoji('<:icontank:1511342553457492038>').setStyle(ButtonStyle.Primary);
-            const healerButon = new ButtonBuilder().setCustomId('raid_bas_heal').setLabel('HEALER').setEmoji('<:iconheal:1511342753915732150>').setStyle(ButtonStyle.Success);
-            const dpsButon = new ButtonBuilder().setCustomId('raid_bas_dps').setLabel('DPS').setEmoji('<:icondps:1511342631043727613>').setStyle(ButtonStyle.Danger);
-            const yedekButon = new ButtonBuilder().setCustomId('raid_bas_yedek').setLabel('YEDEK').setEmoji('<:iconyedek:1511353056392904734>').setStyle(ButtonStyle.Secondary);
-
-            const row = new ActionRowBuilder().addComponents(tankButon, healerButon, dpsButon, yedekButon);
+            const embed = raidEmbedOlustur(raidVerisi);
+            const row = raidButonSatiriOlustur();
 
             const raidMesaji = await interaction.channel.send({ embeds: [embed], components: [row] });
 
-            raidHafizasi.set(raidMesaji.id, {
-                zindan: zindanAdi, tarih: gosterilecekTarih, aciklama: aciklama,
-                tanklar: [], healerlar: [], dpsler: [], yedekler: []
-            });
+            raidVerisiniKaydet(raidMesaji.id, raidVerisi);
 
             try {
                 await interaction.editReply({ content: '✅ Etkinlik kartı başarıyla oluşturuldu!', components: [] });
@@ -368,6 +735,29 @@ async function raidSisteminiYonet(interaction) {
 
             secimHafizasi.delete(interaction.user.id);
             return;
+        }
+
+        if (interaction.isButton() && interaction.customId === 'raid_cikis') {
+            await interaction.deferReply({ flags: [64] });
+
+            const mesajId = interaction.message.id;
+            const veri = raidHafizasi.get(mesajId);
+            if (!veri) return await interaction.editReply({ content: '❌ Bu raid kartının verisi güncelliğini yitirmiş.' });
+
+            raidVerisiniNormalizeEt(veri);
+            const silinenKayit = kullaniciyiTumRollerdenCikar(veri, interaction.user);
+
+            if (!silinenKayit) {
+                return await interaction.editReply({ content: '❌ Bu raidde zaten kayıtlı görünmüyorsunuz.' });
+            }
+
+            raidVerisiniKaydet(mesajId, veri);
+
+            const guncelEmbed = raidEmbedOlustur(veri);
+            const anaMesaj = await raidMesajiniGetir(interaction, mesajId, veri);
+            await anaMesaj.edit({ embeds: [guncelEmbed], components: [raidButonSatiriOlustur()] });
+
+            return await interaction.editReply({ content: '✅ Raid kaydınız başarıyla silindi.' });
         }
 
         if (interaction.isButton() && interaction.customId.startsWith('raid_bas_')) {
@@ -398,44 +788,21 @@ async function raidSisteminiYonet(interaction) {
 
             const klasBul = klasSecenekleri[rol].find(k => k.value === secilenKlasValue);
             const emoji = klasBul ? klasBul.emoji : '🔹';
-            const katilimciMetni = `${kullaniciObj.toString()} (${emoji} ${secilenKlasValue})`;
+            raidVerisiniNormalizeEt(veri);
+            const mevcutKayit = kullaniciyiTumRollerdenCikar(veri, kullaniciObj);
+            const katilimciKaydi = katilimciKaydiOlustur(veri, kullaniciObj, secilenKlasValue, emoji, mevcutKayit);
 
-            const temizle = (liste) => liste.filter(item => !item.includes(kullaniciObj.toString()));
-            veri.tanklar = temizle(veri.tanklar || []);
-            veri.healerlar = temizle(veri.healerlar || []);
-            veri.dpsler = temizle(veri.dpsler || []);
-            veri.yedekler = temizle(veri.yedekler || []);
+            if (rol === 'tank') veri.tanklar.push(katilimciKaydi);
+            if (rol === 'heal') veri.healerlar.push(katilimciKaydi);
+            if (rol === 'dps') veri.dpsler.push(katilimciKaydi);
+            if (rol === 'yedek') veri.yedekler.push(katilimciKaydi);
 
-            if (rol === 'tank') veri.tanklar.push(katilimciMetni);
-            if (rol === 'heal') veri.healerlar.push(katilimciMetni);
-            if (rol === 'dps') veri.dpsler.push(katilimciMetni);
-            if (rol === 'yedek') veri.yedekler.push(katilimciMetni);
+            raidVerisiniKaydet(mesajId, veri);
 
-            raidHafizasi.set(mesajId, veri);
+            const guncelEmbed = raidEmbedOlustur(veri);
 
-            const tankMetin = veri.tanklar.length > 0 ? veri.tanklar.join('\n') : 'Boş';
-            const healMetin = veri.healerlar.length > 0 ? veri.healerlar.join('\n') : 'Boş';
-            const dpsMetin = veri.dpsler.length > 0 ? veri.dpsler.join('\n') : 'Boş';
-            const yedekMetin = veri.yedekler.length > 0 ? veri.yedekler.join('\n') : 'Boş';
-
-            const maviTiklanabilirBaslik = `[${veri.zindan.toUpperCase()} RUNU](https://discord.com)`;
-
-            const guncelEmbed = new EmbedBuilder()
-                .setColor('#0099ff')
-                .setTitle('ASHES OF ANKA RAID OLUŞTURUCU')
-                .setDescription(`## ${maviTiklanabilirBaslik}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${veri.tarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${veri.aciklama}`)
-                .addFields(
-                    { name: `<:icontank:1511342553457492038> TANK (${veri.tanklar.length})`, value: tankMetin, inline: true },
-                    { name: `<:iconheal:1511342753915732150> HEALER (${veri.healerlar.length})`, value: healMetin, inline: true },
-                    { name: `<:icondps:1511342631043727613> DPS (${veri.dpsler.length})`, value: dpsMetin, inline: true },
-                    { name: `<:iconyedek:1511353056392904734> YEDEK (${veri.yedekler.length})`, value: yedekMetin, inline: true }
-                )
-                .setTimestamp()
-                .setFooter({ text: 'Ashes of Anka Raid Sistemi' });
-
-            const anaKanal = interaction.channel;
-            const anaMesaj = await anaKanal.messages.fetch(mesajId);
-            await anaMesaj.edit({ embeds: [guncelEmbed] });
+            const anaMesaj = await raidMesajiniGetir(interaction, mesajId, veri);
+            await anaMesaj.edit({ embeds: [guncelEmbed], components: [raidButonSatiriOlustur()] });
 
             return await interaction.followUp({ content: `✅ **${secilenKlasValue}** olarak başarıyla kaydoldunuz!`, flags: [64] });
         }
@@ -451,7 +818,9 @@ async function raidSisteminiYonet(interaction) {
 module.exports = { 
     raidKomutu, 
     raidSisteminiYonet, 
-    raidOyuncuEkleKomutu, 
+    raidOyuncuEkleKomutu,
+    raidDuzenleKomutu,
+    raidDuzenleKomutuYonet,
     raidAutocompleteYonet, 
     raidManuelOyuncuEkle 
 };
