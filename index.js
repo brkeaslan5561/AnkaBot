@@ -1,11 +1,12 @@
-const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, SlashCommandBuilder, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const config = require('./config.json');
 const fs = require('fs');
-const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidKapanisTakibiniBaslat } = require('./raid.js');
+const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidZamanlayicisiniBaslat } = require('./raid.js');
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages],
+    partials: [Partials.Channel]
 });
 
 // Zindan listesini okuyan fonksiyon (Eski sistem için)
@@ -63,6 +64,7 @@ function gosterIlerleme(toplam, tamamlanan) {
 // DeprecationWarning uyarısını engellemek için clientReady olarak güncellendi
 client.once('clientReady', async () => {
     console.log(`🚀 ${client.user.tag} olarak giriş yapıldı!`);
+    raidZamanlayicisiniBaslat(client);
     const rest = new REST({ version: '10' }).setToken(config.token);
     try {
         await rest.put(Routes.applicationCommands(config.clientId), { body: commands });
@@ -70,8 +72,6 @@ client.once('clientReady', async () => {
     } catch (error) {
         console.error(error);
     }
-
-    await raidKapanisTakibiniBaslat(client);
 });
 
 // ANA ETKİLEŞİM DİNLEYİCİSİ

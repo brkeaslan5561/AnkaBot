@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test",
+    "check": "node --check index.js && node --check raid.js && node --check raid_assignment.js && node --check raid_table.js",
+    "preview": "node scripts/generate_raid_preview.js"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +14,7 @@
   "type": "commonjs",
   "dependencies": {
     "@discordjs/rest": "^2.6.1",
-    "discord.js": "^14.26.4"
+    "discord.js": "^14.26.4",
+    "sharp": "^0.34.5"
   }
 }
