@@ -71,6 +71,39 @@ test('manuel atama veya lider onayı final plan parmak izini değiştirir', () =
     assert.notEqual(second, third);
 });
 
+test('son 15 dakikadaki plan değişiklikleri yalnızca T-5 ve başlangıç kontrol noktalarında yayınlanır', () => {
+    const raid = emptyRaid('trial');
+    raid.finalSent = true;
+    raid.finalPlanFingerprint = _test.planInputFingerprint(raid);
+
+    raid.planOverrides['1'] = { artifact: "Demogorgon's Reach" };
+    assert.equal(_test.planPublicationAction(raid, 10 * 60), null);
+    assert.equal(_test.planPublicationAction(raid, 5 * 60), 'checkpoint');
+
+    raid.fiveMinuteCheckpointSent = true;
+    raid.finalPlanFingerprint = _test.planInputFingerprint(raid);
+    raid.planOverrides['2'] = { mount: 'Swarm' };
+    assert.equal(_test.planPublicationAction(raid, 4 * 60), null);
+    assert.equal(_test.planPublicationAction(raid, 0), 'kickoff');
+});
+
+test('değişiklik yoksa T-5 ve başlangıçta mükerrer tablo üretilmez', () => {
+    const raid = emptyRaid('trial');
+    raid.finalSent = true;
+    raid.finalPlanFingerprint = _test.planInputFingerprint(raid);
+
+    assert.equal(_test.planPublicationAction(raid, 5 * 60), 'mark-checkpoint');
+    raid.fiveMinuteCheckpointSent = true;
+    assert.equal(_test.planPublicationAction(raid, 0), null);
+});
+
+test('ilk T-15 paylaşımı kaçırılmışsa uygun ilk kontrol noktasında plan yayınlanır', () => {
+    const raid = emptyRaid('trial');
+    assert.equal(_test.planPublicationAction(raid, 14 * 60), 'initial');
+    assert.equal(_test.planPublicationAction(raid, 4 * 60), 'checkpoint');
+    assert.equal(_test.planPublicationAction(raid, 0), 'kickoff');
+});
+
 test('Discord raid kartı ve profil seçim bileşenleri geçerli JSON üretir', () => {
     const raid = emptyRaid('trial');
     raid.tarih = '<t:1784311200:F>';

@@ -15,7 +15,9 @@ Discord üzerinde zindan/trial kaydı, kalıcı oyuncu ekipman profili ve otomat
 - Kayıtlı profil, aynı klas bir sonraki seçildiğinde otomatik yüklenir. Kullanıcı isterse **Profilimi Güncelle** düğmesini kullanabilir.
 - Raid başlamadan 30 dakika önce lidere büyük PNG taslağı ve varsa eksik atama uyarıları gönderilir.
 - Lider taslağı onaylayabilir, otomatik yenileyebilir veya oyuncu/alan bazında manuel değiştirebilir.
-- Başlamadan 15 dakika önce 2560 px genişliğindeki final PNG kanalda paylaşılır ve ana kadrodaki herkes etiketlenir.
+- Başlamadan 15 dakika önce 2560 px genişliğindeki ilk plan PNG'si kanalda bir kez paylaşılır ve ana kadrodaki herkes etiketlenir.
+- T−15 ile T−5 arasındaki giriş, çıkış ve rol değişiklikleri sessizce biriktirilir; plan değişmişse T−5'te yalnızca bir güncel tablo paylaşılır.
+- T−5'ten sonra oluşan değişiklikler yeni mesaj üretmez; plan değişmişse etkinlik başladığı anda tek bir **Nihai raid planı** paylaşılır.
 - PNG oluşturucu kendi DejaVu Sans fontunu paket içinden yükler; AWS makinesine ayrıca font kurmak gerekmez.
 - Kadro eksikse tablo yine 5/10 satırla hazırlanır; eksik oyuncu ve eşya hücreleri boş kalır.
 - Eski sürümde oluşturulan `raid_bas_*`, `raid_klas_secim_*` ve `raid_cikis` bileşenleriyle uyumluluk korunur.
@@ -105,4 +107,4 @@ Yeni görselin dosya adını değiştirirseniz `raid_catalog.js` içindeki ilgil
 - `raid_data.json`: Raid kadroları, yedekler, planlar ve zamanlayıcı durumu.
 - `raid_profiles.json`: Kullanıcıların klas bazlı kalıcı ekipman profilleri.
 
-Bu iki dosyanın düzenli yedeğini alın. Zamanlanmış T−30/T−15 bildirimlerinin çalışması için bot işlemi raid saatine kadar açık kalmalıdır.
+Bu iki dosyanın düzenli yedeğini alın. Zamanlanmış T−30/T−15/T−5/başlangıç bildirimlerinin çalışması için bot işlemi raid saatine kadar açık kalmalıdır.

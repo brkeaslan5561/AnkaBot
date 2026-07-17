@@ -24,6 +24,7 @@ const NONE_VALUE = '__none__';
 const RESERVE_APPROVAL_MS = 5 * 60 * 1000;
 const DRAFT_BEFORE_SECONDS = 30 * 60;
 const FINAL_BEFORE_SECONDS = 15 * 60;
+const CHECKPOINT_BEFORE_SECONDS = 5 * 60;
 
 const raidHafizasi = new Map();
 const raidKurulumHafizasi = new Map();
@@ -271,6 +272,8 @@ function normalizeRaid(raid) {
     raid.planNeedsRefresh = Boolean(raid.planNeedsRefresh);
     raid.draftSent = Boolean(raid.draftSent);
     raid.finalSent = Boolean(raid.finalSent);
+    raid.fiveMinuteCheckpointSent = Boolean(raid.fiveMinuteCheckpointSent);
+    raid.kickoffFinalSent = Boolean(raid.kickoffFinalSent);
     raid.planApproved = Boolean(raid.planApproved);
     raid.kapandi = Boolean(raid.kapandi);
     return raid;
@@ -674,7 +677,7 @@ async function completeRegistration(interaction, session, profileWasLoaded = fal
 
     const message = result.overflow
         ? `⚠️ **${raid.capacity} kişilik ana kadro dolu olduğu için yedeğe gönderildiniz.** Hedef rolünüz **${session.role === 'heal' ? 'HEALER' : session.role.toUpperCase()}** olarak kaydedildi.`
-        : `✅ **${session.className}** olarak başarıyla kaydoldunuz.${profileWasLoaded ? ' Kayıtlı profiliniz otomatik kullanıldı.' : ' Profiliniz sonraki kayıtlar için kaydedilmiştir. Bu klas için ek olarak profil ayarlaması yapmanıza gerek yoktur.'}`;
+        : `✅ **${session.className}** olarak başarıyla kaydoldunuz.${profileWasLoaded ? ' Kayıtlı profiliniz otomatik kullanıldı.' : ' Profiliniz sonraki kayıtlar için kaydedildi.'}`;
 
     return interaction.update({
         content: message,
@@ -817,29 +820,67 @@ async function sendDraft(client, messageId, raid, reason = null) {
     return sent;
 }
 
-async function sendFinalPlan(client, messageId, raid, updated = false) {
+async function sendFinalPlan(client, messageId, raid, phase = 'initial') {
     const plan = generatePlan(raid);
     const status = raid.planApproved ? 'LİDER ONAYLI' : 'OTOMATİK PLAN';
     const image = await renderRaidTable(raid, plan, { status });
-    const attachment = new AttachmentBuilder(image, { name: `anka-${String(raid.zindanKodu || 'raid').toLowerCase()}-plan.png` });
+    const phaseDetails = {
+        initial: {
+            heading: '📋 **Raid planı hazır**',
+            fileSuffix: 'plan'
+        },
+        checkpoint: {
+            heading: '🔄 **5 dakika kala güncellenmiş raid planı**',
+            fileSuffix: 'plan-5dk'
+        },
+        kickoff: {
+            heading: '🏁 **Nihai raid planı**',
+            fileSuffix: 'nihai-plan'
+        }
+    }[phase] || {
+        heading: '📋 **Raid planı hazır**',
+        fileSuffix: 'plan'
+    };
+    const attachment = new AttachmentBuilder(image, {
+        name: `anka-${String(raid.zindanKodu || 'raid').toLowerCase()}-${phaseDetails.fileSuffix}.png`
+    });
     const users = plan.rows.map(row => row.userId).filter(Boolean);
     const mentions = users.map(userId => `<@${userId}>`).join(' ');
     const channel = await client.channels.fetch(raid.channelId);
     if (!channel?.send) throw new Error('Raid kanalı bulunamadı.');
 
-    const heading = updated ? '🔄 **Güncellenmiş raid planı**' : '**Trial/Zindan Tablosu Hazırlanmıştır. Lütfen Aşağıdaki Binek, Eser ve Yoldaşla Birlikte Oyunda Hazır Olunuz.**';
-    const content = `${heading}\n${mentions}`.trim();
+    const content = `${phaseDetails.heading}\n${mentions}`.trim();
     const message = await channel.send({
         content,
         files: [attachment],
         allowedMentions: { users }
     });
     raid.finalSent = true;
+    if (phase === 'checkpoint') raid.fiveMinuteCheckpointSent = true;
+    if (phase === 'kickoff') raid.kickoffFinalSent = true;
     raid.finalMessageId = message.id;
     raid.finalPlanFingerprint = planInputFingerprint(raid);
     raid.planNeedsRefresh = false;
     saveRaid(messageId, raid);
     return message;
+}
+
+function planPublicationAction(raid, secondsUntil) {
+    const planChangedSincePublished = !raid.finalSent
+        || raid.finalPlanFingerprint !== planInputFingerprint(raid);
+
+    if (secondsUntil <= 0) {
+        if (!raid.kapandi && !raid.kickoffFinalSent && planChangedSincePublished) return 'kickoff';
+        return null;
+    }
+
+    if (secondsUntil <= CHECKPOINT_BEFORE_SECONDS) {
+        if (raid.fiveMinuteCheckpointSent) return null;
+        return planChangedSincePublished ? 'checkpoint' : 'mark-checkpoint';
+    }
+
+    if (secondsUntil <= FINAL_BEFORE_SECONDS && !raid.finalSent) return 'initial';
+    return null;
 }
 
 function leaderOwnsRaid(interaction, raid) {
@@ -899,6 +940,14 @@ async function schedulerTick(client) {
 
             const secondsUntil = Number(raid.unixZamani || 0) - nowSeconds;
             if (secondsUntil <= 0) {
+                const publicationAction = planPublicationAction(raid, secondsUntil);
+                if (publicationAction === 'kickoff') {
+                    try {
+                        await sendFinalPlan(client, messageId, raid, 'kickoff');
+                    } catch (error) {
+                        console.error(`Nihai raid planı gönderilemedi (${messageId}):`, error);
+                    }
+                }
                 if (!raid.kapandi) {
                     raid.kapandi = true;
                     saveRaid(messageId, raid);
@@ -909,16 +958,21 @@ async function schedulerTick(client) {
 
             const currentFingerprint = rosterFingerprint(raid);
             if (raid.planRosterFingerprint && currentFingerprint !== raid.planRosterFingerprint) raid.planNeedsRefresh = true;
-            const planChangedSinceFinal = raid.finalPlanFingerprint !== planInputFingerprint(raid);
             const shouldRefreshDraft = !raid.draftSent || raid.planNeedsRefresh;
-            const shouldRefreshFinal = !raid.finalSent || planChangedSinceFinal;
 
-            if (secondsUntil <= DRAFT_BEFORE_SECONDS && shouldRefreshDraft) {
+            if (secondsUntil <= DRAFT_BEFORE_SECONDS
+                && secondsUntil > FINAL_BEFORE_SECONDS
+                && shouldRefreshDraft) {
                 await sendDraft(client, messageId, raid, raid.draftSent ? 'Kadro değişti; taslak yenilendi.' : null);
             }
 
-            if (secondsUntil <= FINAL_BEFORE_SECONDS && shouldRefreshFinal) {
-                await sendFinalPlan(client, messageId, raid, raid.finalSent);
+            const publicationAction = planPublicationAction(raid, secondsUntil);
+            if (publicationAction === 'initial' || publicationAction === 'checkpoint') {
+                await sendFinalPlan(client, messageId, raid, publicationAction);
+            } else if (publicationAction === 'mark-checkpoint') {
+                raid.fiveMinuteCheckpointSent = true;
+                raid.planNeedsRefresh = false;
+                saveRaid(messageId, raid);
             }
         }
     } catch (error) {
@@ -1006,6 +1060,10 @@ async function raidDuzenleKomutuYonet(interaction) {
         raid.kapandi = false;
         raid.draftSent = false;
         raid.finalSent = false;
+        raid.fiveMinuteCheckpointSent = false;
+        raid.kickoffFinalSent = false;
+        raid.finalMessageId = null;
+        raid.finalPlanFingerprint = null;
         raid.planApproved = false;
         raid.planNeedsRefresh = true;
     }
@@ -1426,6 +1484,7 @@ module.exports = {
         capacityForType,
         rosterFingerprint,
         planInputFingerprint,
+        planPublicationAction,
         generatePlan,
         raidEmbedOlustur,
         raidButtonRow,
