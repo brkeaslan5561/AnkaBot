@@ -790,7 +790,7 @@ async function sendDraft(client, messageId, raid, reason = null) {
     const plan = generatePlan(raid);
     const image = await renderRaidTable(raid, plan, { status: raid.planApproved ? 'LİDER ONAYLI' : 'TASLAK' });
     const attachment = new AttachmentBuilder(image, { name: `anka-${String(raid.zindanKodu || 'raid').toLowerCase()}-taslak.png` });
-    const content = `📋 **${raid.zindan} tablo taslağı hazır.**${reason ? `\n${reason}` : ''}\n\n${warningText(plan)}`;
+    const content = `**${raid.zindan} Raid/Zindan Tablosu Hazırlanmıştır. Lütfen Tabloyu Kontrol Edin ve Onaylayın.**${reason ? `\n${reason}` : ''}\n\n${warningText(plan)}`;
     const payload = { content, files: [attachment], components: [planActionRow(messageId)] };
     let sent = false;
 
@@ -826,19 +826,19 @@ async function sendFinalPlan(client, messageId, raid, phase = 'initial') {
     const image = await renderRaidTable(raid, plan, { status });
     const phaseDetails = {
         initial: {
-            heading: '📋 **Raid planı hazır**',
+            heading: '**Raid Tablosu Hazırlanmıştır. Lütfen Tabloyu Kontrol Edin ve Tablodaki Değerlerle Birlikte 15 Dakika Öncesinden Oyunda Olunuz.**',
             fileSuffix: 'plan'
         },
         checkpoint: {
-            heading: '🔄 **5 dakika kala güncellenmiş raid planı**',
+            heading: '🔄 **Değişikler Sebebiyle Tablo Güncellenmiştir. Lütfen Yeni Değerleri Kontrol Edin.**',
             fileSuffix: 'plan-5dk'
         },
         kickoff: {
-            heading: '🏁 **Nihai raid planı**',
+            heading: '🏁 **Değişikler Sebebiyle Tablo Güncellenmiştir. Lütfen Yeni Değerleri Kontrol Edin.**',
             fileSuffix: 'nihai-plan'
         }
     }[phase] || {
-        heading: '📋 **Raid planı hazır**',
+        heading: '**Raid Tablosu Hazırlanmıştır. Lütfen Tabloyu Kontrol Edin ve Tablodaki Değerlerle Birlikte 15 Dakika Öncesinden Oyunda Olunuz.**',
         fileSuffix: 'plan'
     };
     const attachment = new AttachmentBuilder(image, {
