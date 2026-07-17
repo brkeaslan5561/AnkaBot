@@ -19,7 +19,7 @@ const artifacts = [
     { id: 'frozen_storytellers_journal', name: "Frozen Storyteller's Journal", group: 'frozen_storytellers_journal', buff: 10, rank: 10, icon: 'artifacts/frozen-storytellers-journal.png' },
     { id: 'lantern_of_revelation', name: 'Lantern of Revelation', group: 'lantern_of_revelation', buff: 10, rank: 11, icon: 'artifacts/lantern-of-revelation.png' },
     { id: 'black_dragons_mark', name: "Black Dragon's Mark", group: 'black_dragons_mark', buff: 10, rank: 12, icon: 'artifacts/black-dragons-mark.png' },
-    { id: 'charm_of_the_serpent', name: 'Charm of the Serpent', group: 'charm_of_the_serpent', buff: 10, rank: 13, icon: null },
+    { id: 'charm_of_the_serpent', name: 'Charm of the Serpent', group: 'charm_of_the_serpent', buff: 10, rank: 13, icon: null, fallbackEmoji: '🐍' },
     { id: 'marilith_mask', name: 'Marilith Mask', group: 'marilith_mask', buff: 7.5, rank: 14, icon: 'artifacts/marilith-mask.png' },
     { id: 'grace_of_pelor', name: 'Grace of Pelor', group: 'grace_of_pelor', buff: 7.5, rank: 15, icon: 'artifacts/grace-of-pelor.png' }
 ];
@@ -38,7 +38,7 @@ const mounts = [
     { id: 'brain_stealer_dragon', name: 'Brain Stealer Dragon', group: 'brain_stealer_dragon', kind: 'debuff', rank: 7, icon: 'mounts/brain-stealer-dragon.png' },
     { id: 'glorious_undead_lion', name: 'Glorious Undead Lion', group: 'glorious_undead_lion', kind: 'debuff', rank: 8, icon: 'mounts/glorious-undead-lion.png' },
     { id: 'red_dragon', name: 'Red Dragon', group: 'red_dragon', kind: 'debuff', rank: 9, icon: 'mounts/red-dragon.png' },
-    { id: 'phantom_panther', name: 'Phantom Panther', group: 'phantom_panther', kind: 'debuff', rank: 10, icon: null }
+    { id: 'phantom_panther', name: 'Phantom Panther', group: 'phantom_panther', kind: 'debuff', rank: 10, icon: null, fallbackEmoji: '🐈‍⬛' }
 ];
 
 const companions = [
@@ -56,12 +56,13 @@ const companions = [
 ];
 
 const auras = [
-    { id: 'mystic_aura', name: 'Mystic Aura', group: 'mystic_aura', rank: 1, icon: null },
-    { id: 'runic_aura', name: 'Runic Aura', group: 'runic_aura', rank: 2, icon: null },
-    { id: 'pack_tactics', name: 'Pack Tactics', group: 'pack_tactics', rank: 3, icon: null }
+    { id: 'mystic_aura', name: 'Mystic Aura', group: 'mystic_aura', rank: 1, icon: null, fallbackEmoji: '🔮' },
+    { id: 'runic_aura', name: 'Runic Aura', group: 'runic_aura', rank: 2, icon: null, fallbackEmoji: '🔷' },
+    { id: 'pack_tactics', name: 'Pack Tactics', group: 'pack_tactics', rank: 3, icon: null, fallbackEmoji: '🤝' }
 ];
 
 const catalog = { artifacts, mounts, companions, auras };
+const catalogEmojiRegistry = new Map();
 
 function normalizeName(value) {
     return String(value || '')
@@ -80,13 +81,41 @@ function assetPath(item) {
     return item && item.icon ? path.join(ASSET_ROOT, item.icon) : null;
 }
 
-function selectOptions(category) {
-    return (catalog[category] || []).map(item => {
+function catalogEmojiKey(category, itemId) {
+    return `${category}:${itemId}`;
+}
+
+function setCatalogEmoji(category, itemId, emoji) {
+    const key = catalogEmojiKey(category, itemId);
+    if (!emoji?.id || !emoji?.name) {
+        catalogEmojiRegistry.delete(key);
+        return;
+    }
+    catalogEmojiRegistry.set(key, { id: String(emoji.id), name: String(emoji.name), animated: Boolean(emoji.animated) });
+}
+
+function getCatalogEmoji(category, itemId) {
+    return catalogEmojiRegistry.get(catalogEmojiKey(category, itemId)) || null;
+}
+
+function catalogItemsForRole(category, role = null) {
+    const items = catalog[category] || [];
+    if (category !== 'mounts') return items;
+    if (role === 'dps') return items.filter(item => item.kind === 'dps');
+    if (role === 'tank' || role === 'heal') return items.filter(item => item.kind === 'debuff');
+    return items;
+}
+
+function selectOptions(category, options = {}) {
+    const role = options.role || null;
+    return catalogItemsForRole(category, role).map(item => {
         const option = {
             label: item.name.substring(0, 100),
             value: item.name
         };
-        if (category === 'artifacts') option.description = `%${item.buff} takım hasarı desteği`;
+        const emoji = getCatalogEmoji(category, item.id);
+        if (emoji) option.emoji = emoji;
+        else if (item.fallbackEmoji) option.emoji = item.fallbackEmoji;
         return option;
     });
 }
@@ -101,5 +130,8 @@ module.exports = {
     normalizeName,
     findCatalogItem,
     assetPath,
+    catalogItemsForRole,
+    setCatalogEmoji,
+    getCatalogEmoji,
     selectOptions
 };

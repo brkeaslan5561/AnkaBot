@@ -1,9 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const sharp = require('sharp');
+const fs = require('fs');
 const { renderRaidTable, WIDTH } = require('../raid_table');
+const sharp = require('sharp');
 
 test('trial PNG çıktısı büyük boyutta bütün 10 satırı içerir', async () => {
+    if (process.platform === 'linux') {
+        assert.ok(process.env.FONTCONFIG_FILE);
+        assert.equal(fs.existsSync(process.env.FONTCONFIG_FILE), true);
+    }
     const raid = {
         zindanKodu: 'MZC',
         zindan: 'MZC',
@@ -34,4 +39,3 @@ test('trial PNG çıktısı büyük boyutta bütün 10 satırı içerir', async 
     assert.equal(metadata.height, 1460);
     assert.ok(png.length > 100_000);
 });
-

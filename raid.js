@@ -509,23 +509,33 @@ function registerParticipant(raid, user, displayName, requestedRole, className, 
     return { record, overflow: actualRole === 'yedek' && requestedRole !== 'yedek', existing };
 }
 
-function inventoryMenu(category, selected = []) {
+function profileFlow(session) {
+    return session.role === 'dps'
+        ? ['artifacts', 'mounts', 'companions']
+        : ['artifacts', 'mounts', 'companions', 'auras'];
+}
+
+function inventoryMenu(category, selected = [], role = null) {
     const titles = {
         artifacts: 'Sahip olduğunuz eserleri seçin',
         mounts: 'Sahip olduğunuz binek güçlerini seçin',
         companions: 'Sahip olduğunuz yoldaşları seçin',
         auras: 'Sahip olduğunuz auraları seçin'
     };
+    const itemOptions = selectOptions(category, { role });
+    const visibleValues = new Set(itemOptions.map(option => option.value));
+    const visibleSelected = selected.filter(value => visibleValues.has(value));
     const options = [
-        { label: 'Hiçbiri', value: NONE_VALUE, description: 'Bu kategoride uygun eşya yok', default: selected.length === 0 },
-        ...selectOptions(category).map(option => ({
+        { label: 'Hiçbiri', value: NONE_VALUE, emoji: '🚫', default: visibleSelected.length === 0 },
+        ...itemOptions.map(option => ({
             ...option,
-            default: selected.includes(option.value)
+            default: visibleSelected.includes(option.value)
         }))
     ];
+    const selectedSuffix = visibleSelected.length ? ` • ${visibleSelected.length} seçili` : '';
     return new StringSelectMenuBuilder()
         .setCustomId(`raid_profile_${category}`)
-        .setPlaceholder(titles[category])
+        .setPlaceholder(`${titles[category]}${selectedSuffix}`)
         .setMinValues(1)
         .setMaxValues(options.length)
         .addOptions(options);
@@ -537,22 +547,97 @@ function selectionValues(interaction) {
         : [...interaction.values];
 }
 
-function profileStepPayload(session, category, step) {
+function mergeRoleFilteredSelection(session, category, selectedValues) {
+    if (category !== 'mounts' || !['dps', 'tank', 'heal'].includes(session.role)) return selectedValues;
+    const visibleValues = new Set(selectOptions(category, { role: session.role }).map(option => option.value));
+    const hiddenOwnedValues = session.inventory.mounts.filter(value => !visibleValues.has(value));
+    return [...new Set([...hiddenOwnedValues, ...selectedValues])];
+}
+
+function profileNavigationRow(session, category) {
+    const flow = profileFlow(session);
+    const index = flow.indexOf(category);
+    const buttons = [];
+    if (index > 0) {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(`raid_profile_back_${category}`)
+                .setLabel('Geri')
+                .setStyle(ButtonStyle.Secondary)
+        );
+    }
+    buttons.push(
+        new ButtonBuilder()
+            .setCustomId('raid_profile_cancel')
+            .setLabel('İptal')
+            .setStyle(ButtonStyle.Secondary)
+    );
+    return new ActionRowBuilder().addComponents(buttons);
+}
+
+function profileStepPayload(session, category) {
     const labels = {
         artifacts: 'Eser',
         mounts: 'Binek gücü',
         companions: 'Yoldaş',
         auras: 'Aura'
     };
+    const flow = profileFlow(session);
+    const step = Math.max(0, flow.indexOf(category)) + 1;
+    const mountHint = category === 'mounts'
+        ? session.role === 'dps'
+            ? '\nYalnızca DPS kişisel hasar binekleri gösteriliyor.'
+            : session.role === 'tank' || session.role === 'heal'
+                ? '\nYalnızca takım debuff binekleri gösteriliyor.'
+                : ''
+        : '';
     return {
-        content: `**${session.className} profili • ${step}/4**\n${labels[category]} seçimlerinizi yapın. Birden fazla seçenek işaretleyebilirsiniz.`,
-        components: [new ActionRowBuilder().addComponents(inventoryMenu(category, session.inventory[category]))]
+        content: `**${session.className} profili • ${step}/${flow.length}**\n${labels[category]} seçimlerinizi yapın. Birden fazla seçenek işaretleyebilirsiniz.${mountHint}`,
+        components: [
+            new ActionRowBuilder().addComponents(inventoryMenu(category, session.inventory[category], session.role)),
+            profileNavigationRow(session, category)
+        ]
+    };
+}
+
+function profileReviewPayload(session) {
+    const labels = {
+        artifacts: 'Eserler',
+        mounts: 'Binek güçleri',
+        companions: 'Yoldaşlar',
+        auras: 'Auralar'
+    };
+    const lines = profileFlow(session).map(category => {
+        let values = session.inventory[category] || [];
+        if (category === 'mounts') {
+            const visible = new Set(selectOptions('mounts', { role: session.role }).map(option => option.value));
+            values = values.filter(value => visible.has(value));
+        }
+        const summary = values.length ? values.join(', ') : 'Yok';
+        return `**${labels[category]} (${values.length}):** ${summary}`;
+    });
+    return {
+        content: `**${session.className} profil özeti**\n${lines.join('\n')}\n\nBilgiler doğruysa kaydedip raide katılın.`,
+        components: [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('raid_profile_confirm')
+                .setLabel('Kaydet ve Katıl')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('raid_profile_review_back')
+                .setLabel('Geri')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('raid_profile_cancel')
+                .setLabel('İptal')
+                .setStyle(ButtonStyle.Secondary)
+        )]
     };
 }
 
 async function startProfileSelection(interaction, session, useUpdate = true) {
     profilSecimHafizasi.set(interaction.user.id, session);
-    const payload = profileStepPayload(session, 'artifacts', 1);
+    const payload = profileStepPayload(session, 'artifacts');
     return useUpdate ? interaction.update(payload) : privateReply(interaction, payload);
 }
 
@@ -589,7 +674,7 @@ async function completeRegistration(interaction, session, profileWasLoaded = fal
 
     const message = result.overflow
         ? `⚠️ **${raid.capacity} kişilik ana kadro dolu olduğu için yedeğe gönderildiniz.** Hedef rolünüz **${session.role === 'heal' ? 'HEALER' : session.role.toUpperCase()}** olarak kaydedildi.`
-        : `✅ **${session.className}** olarak başarıyla kaydoldunuz.${profileWasLoaded ? ' Kayıtlı profiliniz otomatik kullanıldı.' : ' Profiliniz sonraki kayıtlar için kaydedildi.'}`;
+        : `✅ **${session.className}** olarak başarıyla kaydoldunuz.${profileWasLoaded ? ' Kayıtlı profiliniz otomatik kullanıldı.' : ' Profiliniz sonraki kayıtlar için kaydedilmiştir. Bu klas için ek olarak profil ayarlaması yapmanıza gerek yoktur.'}`;
 
     return interaction.update({
         content: message,
@@ -742,7 +827,7 @@ async function sendFinalPlan(client, messageId, raid, updated = false) {
     const channel = await client.channels.fetch(raid.channelId);
     if (!channel?.send) throw new Error('Raid kanalı bulunamadı.');
 
-    const heading = updated ? '🔄 **Güncellenmiş raid planı**' : '📋 **Raid planı hazır**';
+    const heading = updated ? '🔄 **Güncellenmiş raid planı**' : '**Trial/Zindan Tablosu Hazırlanmıştır. Lütfen Aşağıdaki Binek, Eser ve Yoldaşla Birlikte Oyunda Hazır Olunuz.**';
     const content = `${heading}\n${mentions}`.trim();
     const message = await channel.send({
         content,
@@ -1120,18 +1205,48 @@ async function handleRegistration(interaction) {
         }, false);
     }
 
+    if (interaction.isButton() && interaction.customId === 'raid_profile_cancel') {
+        profilSecimHafizasi.delete(interaction.user.id);
+        return interaction.update({ content: 'Profil düzenleme işlemi iptal edildi.', components: [] });
+    }
+
+    if (interaction.isButton() && interaction.customId === 'raid_profile_confirm') {
+        const session = profilSecimHafizasi.get(interaction.user.id);
+        if (!session) return interaction.update({ content: '❌ Profil seçimi zaman aşımına uğradı.', components: [] });
+        return completeRegistration(interaction, session, false);
+    }
+
+    if (interaction.isButton() && interaction.customId === 'raid_profile_review_back') {
+        const session = profilSecimHafizasi.get(interaction.user.id);
+        if (!session) return interaction.update({ content: '❌ Profil seçimi zaman aşımına uğradı.', components: [] });
+        const flow = profileFlow(session);
+        return interaction.update(profileStepPayload(session, flow[flow.length - 1]));
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith('raid_profile_back_')) {
+        const session = profilSecimHafizasi.get(interaction.user.id);
+        if (!session) return interaction.update({ content: '❌ Profil seçimi zaman aşımına uğradı.', components: [] });
+        const currentCategory = interaction.customId.replace('raid_profile_back_', '');
+        const flow = profileFlow(session);
+        const currentIndex = flow.indexOf(currentCategory);
+        const previousCategory = currentIndex > 0 ? flow[currentIndex - 1] : flow[0];
+        return interaction.update(profileStepPayload(session, previousCategory));
+    }
+
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('raid_profile_')) {
         const session = profilSecimHafizasi.get(interaction.user.id);
         if (!session) return interaction.update({ content: '❌ Profil seçimi zaman aşımına uğradı.', components: [] });
         const category = interaction.customId.replace('raid_profile_', '');
         if (!['artifacts', 'mounts', 'companions', 'auras'].includes(category)) return null;
-        session.inventory[category] = selectionValues(interaction);
+        session.inventory[category] = mergeRoleFilteredSelection(session, category, selectionValues(interaction));
         profilSecimHafizasi.set(interaction.user.id, session);
 
-        if (category === 'artifacts') return interaction.update(profileStepPayload(session, 'mounts', 2));
-        if (category === 'mounts') return interaction.update(profileStepPayload(session, 'companions', 3));
-        if (category === 'companions' && session.role !== 'dps') return interaction.update(profileStepPayload(session, 'auras', 4));
-        if (category === 'companions' || category === 'auras') return completeRegistration(interaction, session, false);
+        const flow = profileFlow(session);
+        const currentIndex = flow.indexOf(category);
+        if (currentIndex >= 0 && currentIndex < flow.length - 1) {
+            return interaction.update(profileStepPayload(session, flow[currentIndex + 1]));
+        }
+        return interaction.update(profileReviewPayload(session));
     }
 
     if (interaction.isButton() && (interaction.customId === 'raid_leave' || interaction.customId === 'raid_cikis')) {
@@ -1315,6 +1430,9 @@ module.exports = {
         raidEmbedOlustur,
         raidButtonRow,
         inventoryMenu,
-        dateComponents
+        dateComponents,
+        klasSecenekleri,
+        profileStepPayload,
+        profileReviewPayload
     }
 };

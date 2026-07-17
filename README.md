@@ -9,10 +9,14 @@ Discord üzerinde zindan/trial kaydı, kalıcı oyuncu ekipman profili ve otomat
 - Zindan ana kadrosu 5, trial ana kadrosu 10 kişidir. Kapasite dolunca yeni kayıt otomatik yedeğe alınır.
 - Ana kadrodan biri ayrıldığında raid liderine aynı rol için yedek önerilir. Beş dakika cevap verilmezse önerilen oyuncu otomatik geçirilir.
 - Kullanıcının eser, binek gücü, yoldaş ve aura envanteri Discord kullanıcı kimliği + klas adına göre `raid_profiles.json` içinde saklanır.
+- Eser, binek ve yoldaş PNG'leri ilk açılışta botun uygulama emojileriyle eşleştirilir; seçim menülerinde isimlerin yanında gerçek ikonları görünür.
+- Binek menüsü role göre filtrelenir: DPS yalnızca Demonic Gravehound, Tunnel Vision, Giant Toad ve Bigby's Crushing Hand; tank/healer yalnızca takım debuff bineklerini görür.
+- Profil sihirbazında dinamik adım sayacı, seçili adet bilgisi, **Geri**, **İptal** ve son **Kaydet ve Katıl** onayı bulunur. Eser seçeneklerinde açıklama/tooltip gösterilmez.
 - Kayıtlı profil, aynı klas bir sonraki seçildiğinde otomatik yüklenir. Kullanıcı isterse **Profilimi Güncelle** düğmesini kullanabilir.
 - Raid başlamadan 30 dakika önce lidere büyük PNG taslağı ve varsa eksik atama uyarıları gönderilir.
 - Lider taslağı onaylayabilir, otomatik yenileyebilir veya oyuncu/alan bazında manuel değiştirebilir.
 - Başlamadan 15 dakika önce 2560 px genişliğindeki final PNG kanalda paylaşılır ve ana kadrodaki herkes etiketlenir.
+- PNG oluşturucu kendi DejaVu Sans fontunu paket içinden yükler; AWS makinesine ayrıca font kurmak gerekmez.
 - Kadro eksikse tablo yine 5/10 satırla hazırlanır; eksik oyuncu ve eşya hücreleri boş kalır.
 - Eski sürümde oluşturulan `raid_bas_*`, `raid_klas_secim_*` ve `raid_cikis` bileşenleriyle uyumluluk korunur.
 
@@ -45,7 +49,7 @@ npm run check
 node index.js
 ```
 
-Botun kanalda `Mesaj Gönder`, `Bağlantı Yerleştir`, `Dosya Ekle`, `Mesaj Geçmişini Oku` ve `Uygulama Komutlarını Kullan` izinleri olmalıdır. T−30 DM gönderimi için raid liderinin sunucu üyelerinden gelen özel mesajlara izin vermesi gerekir; DM kapalıysa uyarı raid kanalına gönderilir.
+Botun kanalda `Mesaj Gönder`, `Bağlantı Yerleştir`, `Dosya Ekle`, `Mesaj Geçmişini Oku` ve `Uygulama Komutlarını Kullan` izinleri olmalıdır. T−30 DM gönderimi için raid liderinin sunucu üyelerinden gelen özel mesajlara izin vermesi gerekir; DM kapalıysa uyarı raid kanalına gönderilir. Eşya ikonları sunucu emojisi değil uygulama emojisi olduğu için sunucuda emoji yönetme izni gerekmez.
 
 ## AWS üzerinde güncelleme
 
@@ -87,14 +91,14 @@ npm run preview
 
 ## Emoji ve görselleri değiştirme
 
-- Discord rol/klas emoji kimlikleri `raid.js` içindeki `klasSecenekleri`, `raidEmbedOlustur` ve `raidButtonRow` bölümlerindedir.
+- Rol/klas özel emoji adları ve kimlikleri `raid.js` içindeki `klasSecenekleri`, `raidEmbedOlustur` ve `raidButtonRow` bölümlerindedir.
 - Eser görselleri: `assets/raid/artifacts/`
 - Binek görselleri: `assets/raid/mounts/`
 - Yoldaş görselleri: `assets/raid/companions/`
 - Logo: `assets/raid/anka-logo.png`
 - Aura ikonları kodla çizilir; renk/şekilleri `raid_table.js` içindeki `auraIcon` fonksiyonundan değiştirilebilir.
 
-Yeni görselin dosya adını değiştirirseniz `raid_catalog.js` içindeki ilgili `icon` yolunu da güncelleyin.
+Yeni görselin dosya adını değiştirirseniz `raid_catalog.js` içindeki ilgili `icon` yolunu da güncelleyin. Bir eşya ikonunu değiştirdiğinizde mevcut uygulama emojisini Discord Developer Portal'dan bir kez silip botu yeniden başlatırsanız yeni PNG otomatik yüklenir.
 
 ## Çalışma verileri
 

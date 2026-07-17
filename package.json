@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test",
-    "check": "node --check index.js && node --check raid.js && node --check raid_assignment.js && node --check raid_table.js",
+    "check": "node --check index.js && node --check raid.js && node --check raid_assignment.js && node --check raid_catalog.js && node --check raid_emojis.js && node --check raid_table.js",
     "preview": "node scripts/generate_raid_preview.js"
   },
   "keywords": [],

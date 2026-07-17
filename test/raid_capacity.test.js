@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { _test } = require('../raid');
+const { artifacts, catalog, selectOptions, setCatalogEmoji } = require('../raid_catalog');
+const { emojiNameFor } = require('../raid_emojis');
 
 function emptyRaid(contentType = 'dungeon') {
     return _test.normalizeRaid({
@@ -80,6 +82,68 @@ test('Discord raid kartı ve profil seçim bileşenleri geçerli JSON üretir', 
 
     assert.equal(embed.color, 1936337);
     assert.equal(buttons.components.length, 5);
+    for (const button of buttons.components) {
+        assert.ok(button.emoji?.name);
+        assert.match(button.emoji?.id, /^\d+$/);
+    }
+    for (const role of ['tank', 'heal', 'dps', 'yedek']) {
+        for (const option of _test.klasSecenekleri[role]) {
+            assert.match(option.emoji, /^<a?:[a-zA-Z0-9_]+:\d+>$/);
+        }
+    }
     assert.equal(artifacts.options.length, 20);
+    assert.equal(_test.inventoryMenu('mounts', [], 'dps').toJSON().options.length, 5);
+    assert.equal(_test.inventoryMenu('mounts', [], 'heal').toJSON().options.length, 11);
     assert.equal(dateRows.length, 3);
+});
+
+test('envanter seçenekleri role göre filtrelenir ve eser tooltipi içermez', () => {
+    const dpsMounts = selectOptions('mounts', { role: 'dps' });
+    const healerMounts = selectOptions('mounts', { role: 'heal' });
+    assert.deepEqual(
+        new Set(dpsMounts.map(option => option.value)),
+        new Set(['Demonic Gravehound', 'Tunnel Vision', 'Giant Toad', "Bigby's Crushing Hand"])
+    );
+    assert.ok(healerMounts.every(option => !dpsMounts.some(dps => dps.value === option.value)));
+    assert.ok(selectOptions('artifacts').every(option => !('description' in option)));
+});
+
+test('uygulama emojileri eşya isimlerinin yanında select seçeneğine eklenir', () => {
+    const item = artifacts[0];
+    setCatalogEmoji('artifacts', item.id, { id: '123456789012345678', name: 'anka_test' });
+    const option = selectOptions('artifacts').find(entry => entry.value === item.name);
+    assert.deepEqual(option.emoji, { id: '123456789012345678', name: 'anka_test', animated: false });
+    const menuOption = _test.inventoryMenu('artifacts').toJSON().options.find(entry => entry.value === item.name);
+    assert.equal(menuOption.emoji.id, '123456789012345678');
+    setCatalogEmoji('artifacts', item.id, null);
+
+    const names = [];
+    for (const category of ['artifacts', 'mounts', 'companions']) {
+        for (const catalogItem of catalog[category]) {
+            const name = emojiNameFor(category, catalogItem);
+            assert.ok(name.length <= 32);
+            assert.match(name, /^[a-z0-9_]+$/);
+            names.push(name);
+        }
+    }
+    assert.equal(new Set(names).size, names.length);
+});
+
+test('profil sihirbazı role göre adım sayısı ve son onay ekranı üretir', () => {
+    const session = {
+        role: 'dps',
+        className: 'Wizard',
+        inventory: {
+            artifacts: ["Demogorgon's Reach"],
+            mounts: ['Demonic Gravehound'],
+            companions: ['Black Death Scorpion'],
+            auras: []
+        }
+    };
+    const firstStep = _test.profileStepPayload(session, 'artifacts');
+    const review = _test.profileReviewPayload(session);
+    assert.match(firstStep.content, /1\/3/);
+    assert.equal(firstStep.components.length, 2);
+    assert.match(review.content, /profil özeti/);
+    assert.equal(review.components[0].toJSON().components.length, 3);
 });

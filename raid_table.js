@@ -1,5 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+
+// Sharp, SVG metinlerini Linux'ta Fontconfig üzerinden çizer. AWS makinesinde
+// sistem fontu bulunmasa bile kare karakter oluşmaması için fontu projeden yükle.
+const BUNDLED_FONT_CONFIG = path.join(__dirname, 'assets', 'raid', 'fonts', 'fonts.conf');
+if (process.platform === 'linux' && fs.existsSync(BUNDLED_FONT_CONFIG)) {
+    process.env.FONTCONFIG_FILE = BUNDLED_FONT_CONFIG;
+}
+
 const sharp = require('sharp');
 const { ASSET_ROOT, findCatalogItem, assetPath } = require('./raid_catalog');
 
@@ -162,7 +170,7 @@ async function renderRaidTable(raid, plan, options = {}) {
         <defs>
             <clipPath id="logoClip"><rect x="0" y="0" width="112" height="112" rx="24"/></clipPath>
             <style>
-                text { font-family: 'Nimbus Sans', 'DejaVu Sans', Arial, sans-serif; }
+                text { font-family: 'DejaVu Sans', sans-serif; }
                 .eyebrow { fill: #8B94A1; font-size: 20px; font-weight: 700; letter-spacing: 2.5px; }
                 .title { fill: #F2F4F7; font-size: 44px; font-weight: 700; }
                 .meta { fill: #8D96A3; font-size: 23px; font-weight: 500; }

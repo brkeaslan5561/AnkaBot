@@ -3,6 +3,7 @@ const { REST } = require('@discordjs/rest');
 const config = require('./config.json');
 const fs = require('fs');
 const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidZamanlayicisiniBaslat } = require('./raid.js');
+const { syncCatalogEmojis } = require('./raid_emojis.js');
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages],
@@ -65,6 +66,11 @@ function gosterIlerleme(toplam, tamamlanan) {
 client.once('clientReady', async () => {
     console.log(`🚀 ${client.user.tag} olarak giriş yapıldı!`);
     raidZamanlayicisiniBaslat(client);
+    try {
+        await syncCatalogEmojis(client);
+    } catch (error) {
+        console.error('Raid eşya emojileri hazırlanamadı; menüler metin olarak çalışmaya devam edecek:', error.message);
+    }
     const rest = new REST({ version: '10' }).setToken(config.token);
     try {
         await rest.put(Routes.applicationCommands(config.clientId), { body: commands });
