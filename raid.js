@@ -386,23 +386,23 @@ function raidEmbedOlustur(raid) {
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
-        .setDescription(`## ${linkedTitle}\n\n**TÜR:** ${typeLabel}\n**KATILIM:** ${joined}/${raid.capacity} • **YEDEK:** ${raid.yedekler.length}\n\n<:iconsaat:1511342684986408970> **TARİH:**\n ${raid.tarih}\n\n<:iconinfo:1511342488261230613> **AÇIKLAMA:**\n ${raid.aciklama}${statusLine}`)
+        .setDescription(`## ${linkedTitle}\n\n**TÜR:** ${typeLabel}\n**KATILIM:** ${joined}/${raid.capacity} • **YEDEK:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **TARİH:**\n ${raid.tarih}\n\n<:zaciklama:1527641028171923537> **AÇIKLAMA:**\n ${raid.aciklama}${statusLine}`)
         .addFields(
-            { name: `<:icontank:1511342553457492038> TANK (${raid.tanklar.length})`, value: listText(raid.tanklar), inline: true },
-            { name: `<:iconheal:1511342753915732150> HEALER (${raid.healerlar.length})`, value: listText(raid.healerlar), inline: true },
-            { name: `<:icondps:1511342631043727613> DPS (${raid.dpsler.length})`, value: listText(raid.dpsler), inline: true },
-            { name: `<:iconyedek:1511353056392904734> YEDEK (${raid.yedekler.length})`, value: listText(raid.yedekler, true), inline: true }
+            { name: `<:ztank:1527640905073295440> TANK (${raid.tanklar.length})`, value: listText(raid.tanklar), inline: true },
+            { name: `<:zhealer:1527640985520312440> HEALER (${raid.healerlar.length})`, value: listText(raid.healerlar), inline: true },
+            { name: `<:zdps:1527640943191265310> DPS (${raid.dpsler.length})`, value: listText(raid.dpsler), inline: true },
+            { name: `<:zyedek:1527640786185879573> YEDEK (${raid.yedekler.length})`, value: listText(raid.yedekler, true), inline: true }
         )
         .setTimestamp()
         .setFooter({ text: `Ashes of Anka • ${joined}/${raid.capacity}` });
 }
 
 function raidButtonRow(disabled = false) {
-    const tank = new ButtonBuilder().setCustomId('raid_join_tank').setLabel('TANK').setEmoji('<:icontank:1511342553457492038>').setStyle(ButtonStyle.Primary).setDisabled(disabled);
-    const healer = new ButtonBuilder().setCustomId('raid_join_heal').setLabel('HEALER').setEmoji('<:iconheal:1511342753915732150>').setStyle(ButtonStyle.Success).setDisabled(disabled);
-    const dps = new ButtonBuilder().setCustomId('raid_join_dps').setLabel('DPS').setEmoji('<:icondps:1511342631043727613>').setStyle(ButtonStyle.Danger).setDisabled(disabled);
-    const reserve = new ButtonBuilder().setCustomId('raid_join_yedek').setLabel('YEDEK').setEmoji('<:iconyedek:1511353056392904734>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
-    const leave = new ButtonBuilder().setCustomId('raid_leave').setLabel('ÇIKIŞ').setEmoji('<:iconexit:1511665613725106286>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
+    const tank = new ButtonBuilder().setCustomId('raid_join_tank').setLabel('TANK').setEmoji('<:ztank:1527640905073295440>').setStyle(ButtonStyle.Primary).setDisabled(disabled);
+    const healer = new ButtonBuilder().setCustomId('raid_join_heal').setLabel('HEALER').setEmoji('<:zhealer:1527640985520312440>').setStyle(ButtonStyle.Success).setDisabled(disabled);
+    const dps = new ButtonBuilder().setCustomId('raid_join_dps').setLabel('DPS').setEmoji('<:zdps:1527640943191265310>').setStyle(ButtonStyle.Danger).setDisabled(disabled);
+    const reserve = new ButtonBuilder().setCustomId('raid_join_yedek').setLabel('YEDEK').setEmoji('<:zyedek:1527640786185879573>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
+    const leave = new ButtonBuilder().setCustomId('raid_leave').setLabel('ÇIKIŞ').setEmoji('<:zcikis:1527641065614741684>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
     return new ActionRowBuilder().addComponents(tank, healer, dps, reserve, leave);
 }
 
