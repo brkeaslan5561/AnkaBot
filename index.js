@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, Routes, Mo
 const { REST } = require('@discordjs/rest');
 const config = require('./config.json');
 const fs = require('fs');
-const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle } = require('./raid.js');
+const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidKapanisTakibiniBaslat } = require('./raid.js');
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
@@ -70,6 +70,8 @@ client.once('clientReady', async () => {
     } catch (error) {
         console.error(error);
     }
+
+    await raidKapanisTakibiniBaslat(client);
 });
 
 // ANA ETKİLEŞİM DİNLEYİCİSİ
