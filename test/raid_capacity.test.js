@@ -104,6 +104,38 @@ test('ilk T-15 paylaşımı kaçırılmışsa uygun ilk kontrol noktasında plan
     assert.equal(_test.planPublicationAction(raid, 0), 'kickoff');
 });
 
+test('manuel oyuncu ekleme listesi yalnızca açık raidleri ve en yenileri gösterir', () => {
+    const future = Math.floor(Date.now() / 1000) + 3600;
+    const past = Math.floor(Date.now() / 1000) - 3600;
+    const entries = [];
+    for (let id = 1; id <= 30; id += 1) {
+        entries.push([String(id), _test.normalizeRaid({
+            zindan: `Raid ${id}`,
+            contentType: 'trial',
+            unixZamani: future,
+            tanklar: [], healerlar: [], dpsler: [], yedekler: []
+        })]);
+    }
+    entries.push(['999', _test.normalizeRaid({
+        zindan: 'Eski Raid',
+        contentType: 'trial',
+        unixZamani: past,
+        tanklar: [], healerlar: [], dpsler: [], yedekler: []
+    })]);
+
+    const choices = _test.raidAutocompleteChoices(entries, 'raid-oyuncu-ekle', '');
+    assert.equal(choices.length, 25);
+    assert.equal(choices[0].value, '30');
+    assert.ok(choices.some(choice => choice.value === '29'));
+    assert.ok(!choices.some(choice => choice.value === '999'));
+});
+
+test('Discord Unknown Message ve Unknown Channel hataları silinmiş raid olarak algılanır', () => {
+    assert.equal(_test.kayipDiscordKaynagiHatasi({ code: 10008 }), true);
+    assert.equal(_test.kayipDiscordKaynagiHatasi({ code: 10003 }), true);
+    assert.equal(_test.kayipDiscordKaynagiHatasi({ status: 500 }), false);
+});
+
 test('Discord raid kartı ve profil seçim bileşenleri geçerli JSON üretir', () => {
     const raid = emptyRaid('trial');
     raid.tarih = '<t:1784311200:F>';

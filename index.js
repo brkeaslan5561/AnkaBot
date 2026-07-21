@@ -2,12 +2,12 @@ const { Client, GatewayIntentBits, Partials, EmbedBuilder, SlashCommandBuilder, 
 const { REST } = require('@discordjs/rest');
 const config = require('./config.json');
 const fs = require('fs');
-const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidZamanlayicisiniBaslat } = require('./raid.js');
+const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidZamanlayicisiniBaslat, raidMesajiSilindi, raidMesajKayitlariniSil } = require('./raid.js');
 const { syncCatalogEmojis } = require('./raid_emojis.js');
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages],
-    partials: [Partials.Channel]
+    partials: [Partials.Channel, Partials.Message]
 });
 
 // Zindan listesini okuyan fonksiyon (Eski sistem için)
@@ -77,6 +77,19 @@ client.once('clientReady', async () => {
         console.log('✅ Eğik çizgi (Slash) komutları başarıyla yüklendi!');
     } catch (error) {
         console.error(error);
+    }
+});
+
+client.on('messageDelete', message => {
+    if (raidMesajiSilindi(message.id)) {
+        console.log(`🗑️ Raid kartı silindi; zamanlayıcı kaydı kaldırıldı: ${message.id}`);
+    }
+});
+
+client.on('messageDeleteBulk', messages => {
+    const silinenKayitSayisi = raidMesajKayitlariniSil(messages.keys());
+    if (silinenKayitSayisi > 0) {
+        console.log(`🗑️ Toplu mesaj silme işleminde ${silinenKayitSayisi} raid kaydı kaldırıldı.`);
     }
 });
 

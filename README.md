@@ -5,6 +5,8 @@ Discord üzerinde zindan/trial kaydı, kalıcı oyuncu ekipman profili ve otomat
 ## Bu sürümde neler var?
 
 - Süresi geçen raid kartı kırmızıya döner; tüm kayıt düğmeleri kapanır.
+- Discord'dan silinen raid kartı zamanlayıcıdan ve `raid_data.json` kaydından otomatik kaldırılır; daha sonra tablo paylaşılmaz.
+- `/raid-oyuncu-ekle` otomatik tamamlaması yalnızca açık raidleri gösterir ve en yeni raidleri listenin başına alır.
 - Hazır içeriklerin yanında özel zindan/trial adı ve türü girilebilir.
 - Zindan ana kadrosu 5, trial ana kadrosu 10 kişidir. Kapasite dolunca yeni kayıt otomatik yedeğe alınır.
 - Ana kadrodan biri ayrıldığında raid liderine aynı rol için yedek önerilir. Beş dakika cevap verilmezse önerilen oyuncu otomatik geçirilir.

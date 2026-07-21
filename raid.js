@@ -29,6 +29,7 @@ const CHECKPOINT_BEFORE_SECONDS = 5 * 60;
 const raidHafizasi = new Map();
 const raidKurulumHafizasi = new Map();
 const profilSecimHafizasi = new Map();
+const dogrulanmisRaidMesajlari = new Map();
 let profilVerisi = { profiles: {} };
 let schedulerTimer = null;
 let schedulerRunning = false;
@@ -297,6 +298,22 @@ function saveRaid(messageId, raid) {
     saveAllRaids();
 }
 
+function raidMesajKayitlariniSil(messageIds) {
+    let silinenKayitSayisi = 0;
+    for (const messageId of messageIds) {
+        const normalizedId = String(messageId || '');
+        if (!normalizedId) continue;
+        dogrulanmisRaidMesajlari.delete(normalizedId);
+        if (raidHafizasi.delete(normalizedId)) silinenKayitSayisi += 1;
+    }
+    if (silinenKayitSayisi > 0) saveAllRaids();
+    return silinenKayitSayisi;
+}
+
+function raidMesajiSilindi(messageId) {
+    return raidMesajKayitlariniSil([messageId]) > 0;
+}
+
 function loadProfiles() {
     profilVerisi = safeJsonRead(PROFIL_DATA_DOSYASI, { profiles: {} });
     if (!profilVerisi.profiles || typeof profilVerisi.profiles !== 'object') profilVerisi.profiles = {};
@@ -436,13 +453,45 @@ function privateReply(interaction, payload) {
 
 async function fetchRaidMessage(client, messageId, raid, fallbackChannelId = null) {
     const channelIds = [raid.channelId, fallbackChannelId].filter((value, index, array) => value && array.indexOf(value) === index);
+    const errors = [];
     for (const channelId of channelIds) {
         try {
             const channel = await client.channels.fetch(channelId);
             if (channel?.messages) return await channel.messages.fetch(String(messageId));
-        } catch (_) {}
+        } catch (error) {
+            errors.push(error);
+        }
     }
-    throw new Error('Raid mesajı bulunamadı.');
+    const error = new Error('Raid mesajı bulunamadı.');
+    const lastError = errors.at(-1);
+    if (lastError?.code !== undefined) error.code = lastError.code;
+    if (lastError?.status !== undefined) error.status = lastError.status;
+    error.cause = lastError;
+    throw error;
+}
+
+function kayipDiscordKaynagiHatasi(error) {
+    return [10003, 10008].includes(Number(error?.code)) || Number(error?.status) === 404;
+}
+
+async function raidMesajininVarliginiDogrula(client, messageId, raid, maxAgeMs = Infinity) {
+    const normalizedId = String(messageId);
+    const lastVerifiedAt = dogrulanmisRaidMesajlari.get(normalizedId);
+    if (lastVerifiedAt !== undefined && Date.now() - lastVerifiedAt <= maxAgeMs) return true;
+
+    try {
+        await fetchRaidMessage(client, normalizedId, raid);
+        dogrulanmisRaidMesajlari.set(normalizedId, Date.now());
+        return true;
+    } catch (error) {
+        if (kayipDiscordKaynagiHatasi(error)) {
+            raidMesajiSilindi(normalizedId);
+            console.log(`🗑️ Silinmiş raid kartı kayıtlardan kaldırıldı: ${normalizedId}`);
+        } else {
+            console.error(`Raid kartının varlığı doğrulanamadı (${normalizedId}):`, error.message);
+        }
+        return false;
+    }
 }
 
 async function updateRaidCard(client, messageId, raid, fallbackChannelId = null) {
@@ -933,6 +982,7 @@ async function schedulerTick(client) {
         const nowSeconds = Math.floor(Date.now() / 1000);
         for (const [messageId, raid] of raidHafizasi.entries()) {
             normalizeRaid(raid);
+            if (!await raidMesajininVarliginiDogrula(client, messageId, raid)) continue;
 
             if (raid.pendingReserve?.deadline && Date.now() >= raid.pendingReserve.deadline) {
                 await promoteReserve(client, messageId).catch(error => console.error('Yedek yükseltme hatası:', error));
@@ -940,6 +990,7 @@ async function schedulerTick(client) {
 
             const secondsUntil = Number(raid.unixZamani || 0) - nowSeconds;
             if (secondsUntil <= 0) {
+                if (!await raidMesajininVarliginiDogrula(client, messageId, raid, 15_000)) continue;
                 const publicationAction = planPublicationAction(raid, secondsUntil);
                 if (publicationAction === 'kickoff') {
                     try {
@@ -963,11 +1014,13 @@ async function schedulerTick(client) {
             if (secondsUntil <= DRAFT_BEFORE_SECONDS
                 && secondsUntil > FINAL_BEFORE_SECONDS
                 && shouldRefreshDraft) {
+                if (!await raidMesajininVarliginiDogrula(client, messageId, raid, 15_000)) continue;
                 await sendDraft(client, messageId, raid, raid.draftSent ? 'Kadro değişti; taslak yenilendi.' : null);
             }
 
             const publicationAction = planPublicationAction(raid, secondsUntil);
             if (publicationAction === 'initial' || publicationAction === 'checkpoint') {
+                if (!await raidMesajininVarliginiDogrula(client, messageId, raid, 15_000)) continue;
                 await sendFinalPlan(client, messageId, raid, publicationAction);
             } else if (publicationAction === 'mark-checkpoint') {
                 raid.fiveMinuteCheckpointSent = true;
@@ -991,15 +1044,48 @@ function raidZamanlayicisiniBaslat(client) {
 
 async function raidAutocompleteYonet(interaction) {
     if (!interaction.isAutocomplete()) return;
-    const focused = String(interaction.options.getFocused() || '').toLowerCase();
-    const choices = [];
-    for (const [messageId, raid] of raidHafizasi.entries()) {
-        const date = raid.gun && raid.ay !== undefined && raid.saat ? `${raid.gun}/${Number(raid.ay) + 1} ${raid.saat}` : 'Tarih yok';
-        const closed = isRaidClosed(raid) ? 'KAPANDI' : `${mainCount(raid)}/${raid.capacity}`;
-        const label = `${messageId} | ${date} | ${raid.zindanKodu || raid.zindan} | ${closed}`;
-        if (!focused || label.toLowerCase().includes(focused)) choices.push({ name: label.substring(0, 100), value: messageId });
+    const choices = raidAutocompleteChoices(
+        raidHafizasi.entries(),
+        interaction.commandName,
+        interaction.options.getFocused()
+    );
+    await interaction.respond(choices).catch(error => {
+        console.error('Raid otomatik tamamlama yanıtı gönderilemedi:', error.message);
+    });
+}
+
+function raidMessageIdDesc(a, b) {
+    try {
+        const first = BigInt(a);
+        const second = BigInt(b);
+        return first === second ? 0 : first > second ? -1 : 1;
+    } catch (_) {
+        return String(b).localeCompare(String(a));
     }
-    await interaction.respond(choices.slice(0, 25)).catch(() => {});
+}
+
+function raidAutocompleteChoices(entries, commandName, focusedValue = '') {
+    const focused = String(focusedValue || '').trim().toLocaleLowerCase('tr-TR');
+    const manualAdd = commandName === 'raid-oyuncu-ekle';
+
+    return [...entries]
+        .map(([messageId, raid]) => [String(messageId), raid])
+        .filter(([, raid]) => !manualAdd || !isRaidClosed(raid))
+        .sort(([firstId, firstRaid], [secondId, secondRaid]) => {
+            const firstClosed = isRaidClosed(firstRaid);
+            const secondClosed = isRaidClosed(secondRaid);
+            if (firstClosed !== secondClosed) return firstClosed ? 1 : -1;
+            return raidMessageIdDesc(firstId, secondId);
+        })
+        .map(([messageId, raid]) => {
+            const date = raid.gun && raid.ay !== undefined && raid.saat ? `${raid.gun}/${Number(raid.ay) + 1} ${raid.saat}` : 'Tarih yok';
+            const closed = isRaidClosed(raid) ? 'KAPANDI' : `${mainCount(raid)}/${raid.capacity}`;
+            const label = `${messageId} | ${date} | ${raid.zindanKodu || raid.zindan} | ${closed}`;
+            return { name: label.substring(0, 100), value: messageId, searchText: label.toLocaleLowerCase('tr-TR') };
+        })
+        .filter(choice => !focused || choice.searchText.includes(focused))
+        .slice(0, 25)
+        .map(({ name, value }) => ({ name, value }));
 }
 
 async function raidManuelOyuncuEkle(interaction) {
@@ -1476,6 +1562,8 @@ module.exports = {
     raidManuelOyuncuEkle,
     raidDuzenleKomutuYonet,
     raidZamanlayicisiniBaslat,
+    raidMesajiSilindi,
+    raidMesajKayitlariniSil,
     _test: {
         normalizeRaid,
         registerParticipant,
@@ -1485,6 +1573,8 @@ module.exports = {
         rosterFingerprint,
         planInputFingerprint,
         planPublicationAction,
+        raidAutocompleteChoices,
+        kayipDiscordKaynagiHatasi,
         generatePlan,
         raidEmbedOlustur,
         raidButtonRow,
