@@ -20,17 +20,20 @@ const { renderRaidTable } = require('./raid_table');
 const ISTANBUL_UTC_OFFSET_HOURS = 3;
 const RAID_DATA_DOSYASI = path.join(__dirname, 'raid_data.json');
 const PROFIL_DATA_DOSYASI = path.join(__dirname, 'raid_profiles.json');
+const KATILIM_DATA_DOSYASI = path.join(__dirname, 'raid_attendance.json');
 const NONE_VALUE = '__none__';
 const RESERVE_APPROVAL_MS = 5 * 60 * 1000;
 const DRAFT_BEFORE_SECONDS = 30 * 60;
 const FINAL_BEFORE_SECONDS = 15 * 60;
 const CHECKPOINT_BEFORE_SECONDS = 5 * 60;
+const ATTENDANCE_GRACE_SECONDS = 15 * 60;
 
 const raidHafizasi = new Map();
 const raidKurulumHafizasi = new Map();
 const profilSecimHafizasi = new Map();
 const dogrulanmisRaidMesajlari = new Map();
 let profilVerisi = { profiles: {} };
+let katilimVerisi = { players: {} };
 let schedulerTimer = null;
 let schedulerRunning = false;
 
@@ -277,6 +280,12 @@ function normalizeRaid(raid) {
     raid.kickoffFinalSent = Boolean(raid.kickoffFinalSent);
     raid.planApproved = Boolean(raid.planApproved);
     raid.kapandi = Boolean(raid.kapandi);
+    raid.attendancePromptSent = Boolean(raid.attendancePromptSent);
+    raid.attendanceCompleted = Boolean(raid.attendanceCompleted);
+    raid.attendanceRoster = Array.isArray(raid.attendanceRoster) ? raid.attendanceRoster : [];
+    raid.attendanceDraftAbsentIds = Array.isArray(raid.attendanceDraftAbsentIds) ? raid.attendanceDraftAbsentIds.map(String) : [];
+    raid.attendanceResult = raid.attendanceResult && typeof raid.attendanceResult === 'object' ? raid.attendanceResult : null;
+    raid.registrationReminderSentUsers = Array.isArray(raid.registrationReminderSentUsers) ? raid.registrationReminderSentUsers.map(String) : [];
     return raid;
 }
 
@@ -317,6 +326,82 @@ function raidMesajiSilindi(messageId) {
 function loadProfiles() {
     profilVerisi = safeJsonRead(PROFIL_DATA_DOSYASI, { profiles: {} });
     if (!profilVerisi.profiles || typeof profilVerisi.profiles !== 'object') profilVerisi.profiles = {};
+}
+
+function normalizeAttendanceRecord(record = {}) {
+    return {
+        totalAbsences: Math.max(0, Number(record.totalAbsences) || 0),
+        strikeCount: Math.max(0, Math.min(2, Number(record.strikeCount) || 0)),
+        pendingPenalties: Math.max(0, Number(record.pendingPenalties) || 0),
+        blockedRaidIds: Array.isArray(record.blockedRaidIds) ? record.blockedRaidIds.map(String).slice(-50) : [],
+        history: Array.isArray(record.history) ? record.history.slice(-100) : []
+    };
+}
+
+function loadAttendance() {
+    katilimVerisi = safeJsonRead(KATILIM_DATA_DOSYASI, { players: {} });
+    if (!katilimVerisi.players || typeof katilimVerisi.players !== 'object') katilimVerisi.players = {};
+    for (const [userId, record] of Object.entries(katilimVerisi.players)) {
+        katilimVerisi.players[userId] = normalizeAttendanceRecord(record);
+    }
+}
+
+function saveAttendance() {
+    atomicJsonWrite(KATILIM_DATA_DOSYASI, katilimVerisi);
+}
+
+function attendanceRecord(userId) {
+    const id = String(userId);
+    if (!katilimVerisi.players[id]) katilimVerisi.players[id] = normalizeAttendanceRecord();
+    else katilimVerisi.players[id] = normalizeAttendanceRecord(katilimVerisi.players[id]);
+    return katilimVerisi.players[id];
+}
+
+function raidPenaltyStatus(userId, messageId, consume = true) {
+    const record = attendanceRecord(userId);
+    const raidId = String(messageId);
+    if (record.blockedRaidIds.includes(raidId)) {
+        return { blocked: true, consumed: false, pendingPenalties: record.pendingPenalties, record };
+    }
+    if (record.pendingPenalties <= 0) {
+        return { blocked: false, consumed: false, pendingPenalties: 0, record };
+    }
+    if (!consume) {
+        return { blocked: true, consumed: false, pendingPenalties: record.pendingPenalties, record };
+    }
+    record.pendingPenalties -= 1;
+    record.blockedRaidIds = [...record.blockedRaidIds.filter(id => id !== raidId), raidId].slice(-50);
+    saveAttendance();
+    return { blocked: true, consumed: true, pendingPenalties: record.pendingPenalties, record };
+}
+
+function absenceApplied(userId, raid, messageId) {
+    const record = attendanceRecord(userId);
+    record.totalAbsences += 1;
+    record.strikeCount += 1;
+    let penaltyTriggered = false;
+    if (record.strikeCount >= 3) {
+        record.strikeCount = 0;
+        record.pendingPenalties += 1;
+        penaltyTriggered = true;
+    }
+    record.history.push({
+        raidId: String(messageId),
+        raidName: raid.zindan || raid.zindanKodu || 'Raid',
+        unixZamani: Number(raid.unixZamani) || null,
+        markedAt: Date.now()
+    });
+    record.history = record.history.slice(-100);
+    saveAttendance();
+    return { ...record, penaltyTriggered };
+}
+
+function penaltyMessage(status) {
+    const remaining = Number(status.pendingPenalties) || 0;
+    if (status.consumed) {
+        return `⛔ **Raid kayıt cezası uygulandı.**\n\nKayıt olduğunuz halde 3 kez raid katılımı sağlamadığınız işaretlendiği için bu etkinliğe kayıt olamazsınız. **1 raidlik cezanız bu raid için tüketildi.**${remaining > 0 ? `\nBekleyen ek raid cezanız: **${remaining}**` : '\nBir sonraki raide normal şekilde kayıt olabilirsiniz.'}`;
+    }
+    return `⛔ **Bu raid için kayıt cezanız bulunuyor.**\n\nBu etkinlik ceza kapsamında size kapalı. Aynı raidde tekrar kayıt butonuna basmanız cezayı aşmaz.${remaining > 0 ? `\nBekleyen ek raid cezanız: **${remaining}**` : ''}`;
 }
 
 function profileClassKey(className) {
@@ -722,6 +807,9 @@ async function completeRegistration(interaction, session, profileWasLoaded = fal
     );
     saveRaid(session.messageId, raid);
     await updateRaidCard(interaction.client, session.messageId, raid, interaction.channelId);
+    if (!session.preservePlacement) {
+        await sendRegistrationReminder(interaction.client, session.messageId, raid, interaction.user, session.role, result.record.role === 'yedek');
+    }
     profilSecimHafizasi.delete(interaction.user.id);
 
     const message = result.overflow
@@ -803,6 +891,148 @@ async function requestReserveApproval(client, messageId, raid, role) {
     } catch (_) {
         const promoted = await promoteReserve(client, messageId, candidate.userId);
         return { candidate: promoted, autoPromoted: true };
+    }
+}
+
+function attendanceRosterSnapshot(raid) {
+    return mainParticipants(raid)
+        .filter(player => player.userId)
+        .map(player => ({
+            userId: String(player.userId),
+            mention: player.mention || `<@${player.userId}>`,
+            displayName: player.displayName || player.klas || `Oyuncu ${player.userId}`,
+            role: player.role,
+            klas: player.klas || null
+        }));
+}
+
+function attendancePromptComponents(messageId, roster) {
+    if (!roster.length) return [];
+    const menu = new StringSelectMenuBuilder()
+        .setCustomId(`raid_attendance_absent_${messageId}`)
+        .setPlaceholder('Gelmeyen oyuncuları seçin')
+        .setMinValues(1)
+        .setMaxValues(Math.min(25, roster.length))
+        .addOptions(roster.slice(0, 25).map(player => ({
+            label: String(player.displayName || player.userId).substring(0, 100),
+            value: String(player.userId),
+            description: `${player.role === 'heal' ? 'HEALER' : String(player.role || '').toUpperCase()}${player.klas ? ` • ${player.klas}` : ''}`.substring(0, 100)
+        })));
+    const allPresent = new ButtonBuilder()
+        .setCustomId(`raid_attendance_all_${messageId}`)
+        .setLabel('Herkes Geldi')
+        .setStyle(ButtonStyle.Success);
+    return [
+        new ActionRowBuilder().addComponents(menu),
+        new ActionRowBuilder().addComponents(allPresent)
+    ];
+}
+
+function attendanceConfirmRow(messageId) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`raid_attendance_confirm_${messageId}`).setLabel('Yoklamayı Onayla').setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`raid_attendance_reset_${messageId}`).setLabel('Seçimi Sıfırla').setStyle(ButtonStyle.Secondary)
+    );
+}
+
+async function sendAttendancePrompt(client, messageId, raid) {
+    if (raid.attendancePromptSent || raid.attendanceCompleted) return true;
+    const roster = attendanceRosterSnapshot(raid);
+    raid.attendanceRoster = roster;
+    raid.attendanceDraftAbsentIds = [];
+
+    if (!roster.length) {
+        raid.attendancePromptSent = true;
+        raid.attendanceCompleted = true;
+        raid.attendanceResult = { completedAt: Date.now(), absentUserIds: [], presentUserIds: [] };
+        saveRaid(messageId, raid);
+        return true;
+    }
+
+    const content = `📝 **${raid.zindan} yoklaması zamanı.**\n${raid.tarih}\n\nAna kadro: **${roster.length} kişi**\nGelmeyen oyuncuları aşağıdaki listeden seçin. Kimse eksik değilse **Herkes Geldi** butonuna basın.\n\n⚠️ Yoklama onaylandıktan sonra gelmeyen oyuncuların devamsızlık sayacı otomatik güncellenir.`;
+    const payload = { content, components: attendancePromptComponents(messageId, roster) };
+    let sent = false;
+    try {
+        if (!raid.creatorId) throw new Error('Raid lideri bilinmiyor.');
+        const leader = await client.users.fetch(raid.creatorId);
+        await leader.send(payload);
+        sent = true;
+    } catch (_) {
+        try {
+            const channel = await client.channels.fetch(raid.channelId);
+            if (channel?.send) {
+                await channel.send({
+                    ...payload,
+                    content: `${raid.creatorMention || `<@${raid.creatorId}>`}\n${content}`,
+                    allowedMentions: raid.creatorId ? { users: [String(raid.creatorId)] } : undefined
+                });
+                sent = true;
+            }
+        } catch (error) {
+            console.error(`Raid yoklaması gönderilemedi (${messageId}):`, error.message);
+        }
+    }
+    if (sent) {
+        raid.attendancePromptSent = true;
+        saveRaid(messageId, raid);
+    }
+    return sent;
+}
+
+async function sendAbsenceWarning(client, player, raid, result) {
+    try {
+        const user = await client.users.fetch(player.userId);
+        let consequence;
+        if (result.penaltyTriggered) {
+            consequence = `Bu, 3. devamsızlığınız olduğu için hesabınıza **1 raid kayıt cezası** tanımlandı. Bir sonraki raid kayıt denemenizde o raide kayıt olamayacaksınız ve ceza o etkinlik için tüketilecek.${result.pendingPenalties > 1 ? `\nToplam bekleyen raid cezanız: **${result.pendingPenalties}**` : ''}`;
+        } else {
+            const remaining = 3 - result.strikeCount;
+            consequence = `Mevcut devamsızlık sayacınız: **${result.strikeCount}/3**. **${remaining} kez daha** kayıt olduğunuz halde katılım sağlamazsanız 1 raidlik kayıt cezası uygulanacak.`;
+        }
+        await user.send(`⚠️ **Raid Katılım Uyarısı**\n\n**${raid.zindan}** — ${raid.tarih}\nBu etkinliğe kayıtlı olduğunuz halde raid lideri tarafından **katılım sağlamadığınız** işaretlendi.\n\nGerçek hayatta planların değişebileceğini ve beklenmedik durumlar yaşanabileceğini anlıyoruz. Ancak raid kadrosunun sağlıklı kurulabilmesi için kayıtların takibini yapıyoruz.\n\n${consequence}\n\nToplam kaydedilmiş devamsızlığınız: **${result.totalAbsences}**`);
+    } catch (_) {}
+}
+
+async function finalizeAttendance(client, messageId, raid, absentUserIds = []) {
+    if (raid.attendanceCompleted) return { alreadyCompleted: true, absent: [], present: [] };
+    const roster = Array.isArray(raid.attendanceRoster) && raid.attendanceRoster.length
+        ? raid.attendanceRoster
+        : attendanceRosterSnapshot(raid);
+    const rosterIds = new Set(roster.map(player => String(player.userId)));
+    const absentIds = [...new Set(absentUserIds.map(String))].filter(id => rosterIds.has(id));
+    const absentSet = new Set(absentIds);
+    const absent = roster.filter(player => absentSet.has(String(player.userId)));
+    const present = roster.filter(player => !absentSet.has(String(player.userId)));
+    const absenceResults = [];
+
+    for (const player of absent) {
+        const result = absenceApplied(player.userId, raid, messageId);
+        absenceResults.push({ player, result });
+        await sendAbsenceWarning(client, player, raid, result);
+    }
+
+    raid.attendanceCompleted = true;
+    raid.attendanceDraftAbsentIds = [];
+    raid.attendanceResult = {
+        completedAt: Date.now(),
+        absentUserIds: absentIds,
+        presentUserIds: present.map(player => String(player.userId))
+    };
+    saveRaid(messageId, raid);
+    return { alreadyCompleted: false, absent, present, absenceResults };
+}
+
+async function sendRegistrationReminder(client, messageId, raid, user, role, isReserve = false) {
+    const userId = String(user.id);
+    if (raid.registrationReminderSentUsers.includes(userId)) return false;
+    try {
+        await user.send(`✅ **${raid.zindan} etkinliğine kaydınız alındı.**\n${raid.tarih}\nRol: **${isReserve ? 'YEDEK' : role === 'heal' ? 'HEALER' : String(role).toUpperCase()}**\n\n⏰ Lütfen raid saatini unutmayın ve mümkünse **15 dakika önceden oyunda hazır olun.**\n⚠️ Kayıt olup katılım sağlamayan oyuncular raid başlangıcında lider tarafından yoklamada işaretlenebilir.`);
+        raid.registrationReminderSentUsers.push(userId);
+        raid.registrationReminderSentUsers = raid.registrationReminderSentUsers.slice(-100);
+        saveRaid(messageId, raid);
+        return true;
+    } catch (_) {
+        return false;
     }
 }
 
@@ -999,6 +1229,9 @@ async function schedulerTick(client) {
                         console.error(`Nihai raid planı gönderilemedi (${messageId}):`, error);
                     }
                 }
+                if (!raid.kapandi && secondsUntil >= -ATTENDANCE_GRACE_SECONDS && !raid.attendancePromptSent && !raid.attendanceCompleted) {
+                    await sendAttendancePrompt(client, messageId, raid).catch(error => console.error(`Raid yoklaması gönderilemedi (${messageId}):`, error));
+                }
                 if (!raid.kapandi) {
                     raid.kapandi = true;
                     saveRaid(messageId, raid);
@@ -1098,6 +1331,8 @@ async function raidManuelOyuncuEkle(interaction) {
     const raid = raidHafizasi.get(String(messageId));
     if (!raid) return interaction.editReply('❌ Raid verisi bulunamadı.');
     if (isRaidClosed(raid)) return interaction.editReply('❌ Bu raid kapandı; manuel kayıt yapılamaz.');
+    const penalty = raidPenaltyStatus(user.id, messageId, true);
+    if (penalty.blocked) return interaction.editReply(`${user} için kayıt yapılamadı.\n\n${penaltyMessage(penalty)}`);
 
     const profile = getProfile(user.id, className);
     const inventory = profile ? profile.inventory : normalizeInventory();
@@ -1106,9 +1341,7 @@ async function raidManuelOyuncuEkle(interaction) {
     saveRaid(messageId, raid);
     await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
 
-    try {
-        await user.send(`📅 **${raid.zindan}** etkinliğine ${result.overflow ? 'yedek' : requestedRole === 'heal' ? 'HEALER' : requestedRole.toUpperCase()} olarak kaydedildiniz.${profile ? ' Kayıtlı ekipman profiliniz kullanıldı.' : ' Henüz ekipman profiliniz olmadığı için atamalar boş kalabilir.'}`);
-    } catch (_) {}
+    await sendRegistrationReminder(interaction.client, messageId, raid, user, requestedRole, result.record.role === 'yedek');
 
     return interaction.editReply(result.overflow
         ? `⚠️ Ana kadro ${raid.capacity} kişi olduğu için ${user} yedeğe eklendi.`
@@ -1152,6 +1385,11 @@ async function raidDuzenleKomutuYonet(interaction) {
         raid.finalPlanFingerprint = null;
         raid.planApproved = false;
         raid.planNeedsRefresh = true;
+        raid.attendancePromptSent = false;
+        raid.attendanceCompleted = false;
+        raid.attendanceRoster = [];
+        raid.attendanceDraftAbsentIds = [];
+        raid.attendanceResult = null;
     }
     if (newDescription !== null) raid.aciklama = newDescription.trim() || 'Herhangi bir açıklama girilmedi.';
     saveRaid(messageId, raid);
@@ -1301,6 +1539,8 @@ async function handleRegistration(interaction) {
         const messageId = interaction.message.id;
         const raid = raidHafizasi.get(String(messageId));
         if (!raid || isRaidClosed(raid)) return privateReply(interaction, { content: '❌ Bu raid kapandı; kayıt yapılamaz.' });
+        const penalty = raidPenaltyStatus(interaction.user.id, messageId, true);
+        if (penalty.blocked) return privateReply(interaction, { content: penaltyMessage(penalty) });
         const menu = new StringSelectMenuBuilder()
             .setCustomId(`raid_class_${role}_${messageId}`)
             .setPlaceholder('Katılacağınız klası seçin')
@@ -1456,6 +1696,66 @@ async function handleReserveApproval(interaction) {
     return null;
 }
 
+async function handleAttendanceInteraction(interaction) {
+    const isAttendanceSelect = interaction.isStringSelectMenu() && interaction.customId.startsWith('raid_attendance_absent_');
+    const isAttendanceButton = interaction.isButton() && interaction.customId.startsWith('raid_attendance_');
+    if (!isAttendanceSelect && !isAttendanceButton) return null;
+
+    const parts = interaction.customId.split('_');
+    const action = parts[2];
+    const messageId = parts[3];
+    const raid = raidHafizasi.get(String(messageId));
+    if (!raid || !leaderOwnsRaid(interaction, raid)) {
+        return privateReply(interaction, { content: '❌ Bu yoklamayı yalnızca raid lideri yönetebilir.' });
+    }
+    if (raid.attendanceCompleted) {
+        return interaction.update({ content: '✅ Bu raidin yoklaması daha önce tamamlandı.', components: [] });
+    }
+
+    const roster = Array.isArray(raid.attendanceRoster) && raid.attendanceRoster.length
+        ? raid.attendanceRoster
+        : attendanceRosterSnapshot(raid);
+
+    if (isAttendanceSelect && action === 'absent') {
+        raid.attendanceDraftAbsentIds = interaction.values.map(String);
+        saveRaid(messageId, raid);
+        const selected = roster.filter(player => raid.attendanceDraftAbsentIds.includes(String(player.userId)));
+        const lines = selected.map(player => `• ${player.mention || `<@${player.userId}>`} (${player.displayName})`).join('\n');
+        return interaction.update({
+            content: `⚠️ **Gelmeyen olarak işaretlenen oyuncular:**\n${lines || 'Seçim yok'}\n\nBu listeyi onayladığınızda devamsızlık sayaçları işlenecek ve oyunculara özel mesaj gönderilecek.`,
+            components: [attendanceConfirmRow(messageId)]
+        });
+    }
+
+    if (action === 'reset') {
+        raid.attendanceDraftAbsentIds = [];
+        saveRaid(messageId, raid);
+        return interaction.update({
+            content: `📝 **${raid.zindan} yoklaması**\nGelmeyen oyuncuları yeniden seçin.`,
+            components: attendancePromptComponents(messageId, roster)
+        });
+    }
+
+    if (action === 'all') {
+        const result = await finalizeAttendance(interaction.client, messageId, raid, []);
+        return interaction.update({
+            content: `✅ **Yoklama tamamlandı.** Ana kadrodaki **${result.present.length} oyuncunun tamamı geldi** olarak kaydedildi.`,
+            components: []
+        });
+    }
+
+    if (action === 'confirm') {
+        const result = await finalizeAttendance(interaction.client, messageId, raid, raid.attendanceDraftAbsentIds || []);
+        const penaltyLines = result.absenceResults
+            .filter(item => item.result.penaltyTriggered)
+            .map(item => `• ${item.player.mention || `<@${item.player.userId}>`} → **1 raid cezası**`);
+        const summary = `✅ **Yoklama tamamlandı.**\nGelen: **${result.present.length}**\nGelmeyen: **${result.absent.length}**${penaltyLines.length ? `\n\n⛔ **Bu yoklamada ceza alanlar:**\n${penaltyLines.join('\n')}` : ''}`;
+        return interaction.update({ content: summary, components: [] });
+    }
+
+    return null;
+}
+
 async function handlePlanInteraction(interaction) {
     if (interaction.isButton() && interaction.customId.startsWith('raid_plan_')) {
         const parts = interaction.customId.split('_');
@@ -1541,6 +1841,8 @@ async function raidSisteminiYonet(interaction) {
         if (registrationHandled !== null) return registrationHandled;
         const reserveHandled = await handleReserveApproval(interaction);
         if (reserveHandled !== null) return reserveHandled;
+        const attendanceHandled = await handleAttendanceInteraction(interaction);
+        if (attendanceHandled !== null) return attendanceHandled;
         return await handlePlanInteraction(interaction);
     } catch (error) {
         console.error('Raid sisteminde hata oluştu:', error);
@@ -1552,6 +1854,7 @@ async function raidSisteminiYonet(interaction) {
 
 loadRaids();
 loadProfiles();
+loadAttendance();
 
 module.exports = {
     raidKomutu,
@@ -1582,6 +1885,10 @@ module.exports = {
         dateComponents,
         klasSecenekleri,
         profileStepPayload,
-        profileReviewPayload
+        profileReviewPayload,
+        normalizeAttendanceRecord,
+        raidPenaltyStatus,
+        absenceApplied,
+        attendanceRosterSnapshot
     }
 };
