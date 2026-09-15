@@ -12,7 +12,7 @@
   "language.automatic": "🌐 Automatic (Discord language)",
   "language.turkish": "🇹🇷 Türkçe",
   "language.english": "🇬🇧 English",
-  "language.saved": "✅ Dil tercihiniz **{{language}}** olarak kaydedildi.",
+  "language.saved": "✅ **{{language}}** sürümü özel olarak gösteriliyor.",
   "language.auto_name": "Automatic (Discord language)",
   "language.raid_details": "## {{raidName}}\n**Tür:** {{type}}\n**Katılım:** {{joined}}/{{capacity}} · **Yedek:** {{reserves}}\n\n📅 {{raidDate}}\n⏳ {{raidRelative}}\n\n**Açıklama:**\n{{description}}",
   "raid.type.dungeon": "ZİNDAN",

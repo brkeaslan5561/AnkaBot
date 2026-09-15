@@ -113,15 +113,15 @@ Bu iki dosyanın düzenli yedeğini alın. Zamanlanmış T−30/T−15/T−5/ba�
 
 ## Türkçe / English yerelleştirme
 
-AnkaBot kullanıcı tercihlerini `user_language_preferences.json` içinde saklar. Etkileşim dili şu sırayla belirlenir:
+AnkaBot son bilinen Discord dillerini `user_language_preferences.json` içinde saklar. Etkileşim dili şu sırayla belirlenir:
 
-1. Kullanıcının raid veya duyuru kartındaki dil menüsünden yaptığı açık Türkçe/İngilizce seçimi
-2. Kullanıcının Discord etkileşim dili (`tr` / `tr-TR` Türkçe, diğer bütün diller İngilizce)
-3. Discord dili bulunamazsa İngilizce
+1. Kullanıcının güncel Discord etkileşim dili (`tr` / `tr-TR` Türkçe, diğer bütün diller İngilizce)
+2. Discord dili bulunamazsa son bilinen Discord dili
+3. Hiç dil bilgisi yoksa İngilizce
 
-Kullanıcı **Automatic (Discord language)** seçeneğini seçerek elle yaptığı tercihi kaldırabilir ve yeniden Discord diline göre otomatik seçime dönebilir.
+Dil menüsündeki Türkçe ve İngilizce seçenekleri yalnızca seçilen sürümü kullanıcıya özel olarak gösterir; gelecekteki raidlerin dilini kalıcı olarak değiştirmez. **Automatic (Discord language)** güncel Discord dilindeki sürümü gösterir.
 
-Paylaşılan kanal mesajları kullanıcı başına farklı gösterilemediği için yeni raid ve duyurular ilk olarak onları oluşturan kullanıcının kayıtlı tercihinde veya Discord dilinde gösterilir. Dil menüsünden yapılan seçim, raid kartının veya duyuru metninin seçilen dildeki tam sürümünü yalnızca o kullanıcıya ephemeral/özel yanıt olarak gösterir. Bu Discord API'sinin paylaşılan mesajlar için olan bir sınırlamasıdır. Paylaşılan duyurunun altındaki dil yönlendirmesi ve dil seçici her zaman İngilizcedir.
+Paylaşılan kanal mesajları kullanıcı başına farklı gösterilemediği için yeni raid ve duyurular ilk olarak onları oluşturan kullanıcının güncel Discord dilinde gösterilir. Dil menüsünden yapılan seçim, raid kartının veya duyuru metninin seçilen dildeki tam sürümünü yalnızca o kullanıcıya ephemeral/özel yanıt olarak gösterir. Bu Discord API'sinin paylaşılan mesajlar için olan bir sınırlamasıdır. Paylaşılan duyurunun altındaki dil yönlendirmesi ve dil seçici her zaman İngilizcedir.
 
 `config.json` için önerilen ek ayarlar:
 
@@ -134,7 +134,7 @@ Paylaşılan kanal mesajları kullanıcı başına farklı gösterilemediği iç
 }
 ```
 
-`guildLanguages` isteğe bağlıdır. `defaultLanguage` verilmezse İngilizce kullanılır. Bu ayarlar özellikle dil bilgisi bulunmayan eski kayıtlar için yedektir; kullanıcıların açık dil tercihleri her zaman önceliklidir.
+`guildLanguages` isteğe bağlıdır. `defaultLanguage` verilmezse İngilizce kullanılır. Bu ayarlar yalnızca Discord dil bilgisi bulunmayan eski kayıtlar için yedektir.
 
 ## Raid duyurusu
 
@@ -184,7 +184,7 @@ Yeni komutlar bot başlatılırken mevcut global komut kayıt sistemiyle otomati
 
 ## Yeni çalışma verileri
 
-- `user_language_preferences.json`: Kullanıcı dil seçimi ve son bilinen Discord dili
+- `user_language_preferences.json`: Kullanıcıların son bilinen Discord dili
 - `announcements.json`: Taslak ve yayınlanmış duyuruların Türkçe/İngilizce metinleri ile raid/mesaj bağlantıları
 
 Bu dosyalar Git tarafından izlenmez ve ilk kullanımda güvenli şekilde oluşturulur. Şema dönüşümü veya ayrı bir veritabanı kurulumu gerekmez.

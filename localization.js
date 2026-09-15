@@ -112,8 +112,6 @@ function rememberInteractionLocale(userId, locale) {
 }
 
 function resolveUserLanguage(context = {}, fallback = DEFAULT_LANGUAGE) {
-    const manual = String(context.manual || context.language || '').toLowerCase();
-    if (manual === 'tr' || manual === 'en') return manual;
     const localeLanguage = languageFromLocale(context.locale);
     if (localeLanguage) return localeLanguage;
     return normalizeLanguage(context.guildLanguage || fallback, DEFAULT_LANGUAGE);

@@ -12,7 +12,7 @@
   "language.automatic": "🌐 Automatic (Discord language)",
   "language.turkish": "🇹🇷 Türkçe",
   "language.english": "🇬🇧 English",
-  "language.saved": "✅ Your language preference is now **{{language}}**.",
+  "language.saved": "✅ Showing **{{language}}** privately.",
   "language.auto_name": "Automatic (Discord language)",
   "language.raid_details": "## {{raidName}}\n**Type:** {{type}}\n**Attendance:** {{joined}}/{{capacity}} · **Reserves:** {{reserves}}\n\n📅 {{raidDate}}\n⏳ {{raidRelative}}\n\n**Description:**\n{{description}}",
   "raid.type.dungeon": "DUNGEON",

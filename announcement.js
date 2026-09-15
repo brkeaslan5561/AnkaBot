@@ -17,7 +17,6 @@ const {
     t,
     getGuildLanguage,
     languageForInteraction,
-    setUserLanguage,
     resolveRaidTemplateText,
     formatDiscordTimestamp
 } = require('./localization');
@@ -336,8 +335,9 @@ async function handleAnnouncementComponent(interaction) {
         const record = getAnnouncement(id);
         if (!record || record.status !== 'published') return interaction.reply(privatePayload({ content: t(uiLanguage, 'announcement.not_found') }));
         const selected = interaction.values[0];
-        setUserLanguage(interaction.user.id, selected, interaction.locale);
-        uiLanguage = languageForInteraction(interaction);
+        uiLanguage = selected === 'tr' || selected === 'en'
+            ? selected
+            : languageForInteraction(interaction);
         const label = selected === 'auto' ? t(uiLanguage, 'language.auto_name') : selected === 'tr' ? 'Türkçe' : 'English';
         const version = publishedText(record, uiLanguage);
         const saved = t(uiLanguage, 'language.saved', { language: label });

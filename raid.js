@@ -21,7 +21,6 @@ const {
     getGuildLanguage,
     languageForInteraction,
     languageForUser,
-    setUserLanguage,
     formatDiscordTimestamp
 } = require('./localization');
 
@@ -1668,8 +1667,9 @@ async function handleRaidCreation(interaction) {
 async function handleRegistration(interaction) {
     if (interaction.isStringSelectMenu() && interaction.customId === 'raid_language') {
         const selected = interaction.values[0];
-        setUserLanguage(interaction.user.id, selected, interaction.locale);
-        const language = interactionLanguage(interaction);
+        const language = selected === 'tr' || selected === 'en'
+            ? selected
+            : interactionLanguage(interaction);
         const messageId = interaction.message.id;
         const raid = raidHafizasi.get(String(messageId));
         if (!raid) return privateReply(interaction, { content: t(language, 'raid.manual.not_found') });
