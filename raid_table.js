@@ -10,6 +10,7 @@ if (process.platform === 'linux' && fs.existsSync(BUNDLED_FONT_CONFIG)) {
 
 const sharp = require('sharp');
 const { ASSET_ROOT, findCatalogItem, assetPath } = require('./raid_catalog');
+const { t } = require('./localization');
 
 const LOGO_PATH = path.join(ASSET_ROOT, 'anka-logo.png');
 const WIDTH = 2560;
@@ -19,7 +20,6 @@ const TABLE_Y = 220;
 const TABLE_HEADER_HEIGHT = 80;
 const ROW_HEIGHT = 104;
 const COLUMN_WIDTHS = [320, 150, 200, 510, 480, 480, 300];
-const COLUMN_LABELS = ['OYUNCU', 'ROL', 'KLAS', 'ESER', 'BİNEK GÜCÜ', 'YOLDAŞ', 'AURA'];
 const imageCache = new Map();
 
 function escapeXml(value) {
@@ -71,9 +71,9 @@ function roleStyle(role) {
     return { color: '#D98D52', label: 'DPS' };
 }
 
-function formatRaidDate(raid) {
+function formatRaidDate(raid, language = 'tr') {
     if (!raid.unixZamani) return raid.saat || '';
-    return new Intl.DateTimeFormat('tr-TR', {
+    return new Intl.DateTimeFormat(language === 'tr' ? 'tr-TR' : 'en-GB', {
         timeZone: 'Europe/Istanbul',
         day: '2-digit',
         month: 'short',
@@ -153,6 +153,7 @@ function titleText(raid) {
 }
 
 async function renderRaidTable(raid, plan, options = {}) {
+    const language = options.language || 'tr';
     const capacity = Number(plan.capacity || raid.capacity) || 10;
     const rows = Array.isArray(plan.rows) ? plan.rows : [];
     const footerHeight = 70;
@@ -160,8 +161,17 @@ async function renderRaidTable(raid, plan, options = {}) {
     const logoUri = imageDataUri(LOGO_PATH);
     const columnX = [MARGIN];
     for (const width of COLUMN_WIDTHS) columnX.push(columnX[columnX.length - 1] + width);
-    const status = options.status || (raid.planApproved ? 'LİDER ONAYLI' : 'TASLAK');
-    const contentType = raid.contentType === 'dungeon' ? 'ZİNDAN' : 'TRIAL';
+    const status = options.status || t(language, raid.planApproved ? 'raid.table.approved' : 'raid.table.draft');
+    const contentType = t(language, `raid.type.${raid.contentType === 'dungeon' ? 'dungeon' : 'trial'}`);
+    const columnLabels = [
+        t(language, 'raid.table.player'),
+        t(language, 'raid.table.role'),
+        t(language, 'raid.table.class'),
+        t(language, 'raid.table.artifact'),
+        t(language, 'raid.table.mount'),
+        t(language, 'raid.table.companion'),
+        t(language, 'raid.table.aura')
+    ];
     const emptySlots = Math.max(0, capacity - rows.length);
     const warningCount = Array.isArray(plan.warnings) ? plan.warnings.length : 0;
 
@@ -184,9 +194,9 @@ async function renderRaidTable(raid, plan, options = {}) {
         <rect width="${WIDTH}" height="${height}" fill="#0A0D11"/>
         <rect x="${MARGIN}" y="32" width="${TABLE_WIDTH}" height="150" rx="24" fill="#0F1318" stroke="#222831" stroke-width="2"/>
         ${logoUri ? `<g transform="translate(88 51)" clip-path="url(#logoClip)"><image href="${logoUri}" width="112" height="112" preserveAspectRatio="xMidYMid slice"/></g><rect x="88" y="51" width="112" height="112" rx="24" fill="none" stroke="#353C46" stroke-width="2"/>` : ''}
-        <text x="236" y="73" class="eyebrow">ANKA RAID PLANI</text>
+        <text x="236" y="73" class="eyebrow">${escapeXml(t(language, 'raid.table.plan'))}</text>
         <text x="236" y="122" class="title">${escapeXml(titleText(raid))}</text>
-        <text x="236" y="157" class="meta">${contentType}  ·  ${escapeXml(formatRaidDate(raid))}  ·  LİDER ${escapeXml(raid.creatorMention || '')}</text>
+        <text x="236" y="157" class="meta">${contentType}  ·  ${escapeXml(formatRaidDate(raid, language))}  ·  ${escapeXml(t(language, 'raid.table.leader'))} ${escapeXml(raid.creatorMention || '')}</text>
 
         <g transform="translate(1780 83)">
             <rect width="340" height="58" rx="16" fill="#141920" stroke="#29313B" stroke-width="2"/>
@@ -195,9 +205,9 @@ async function renderRaidTable(raid, plan, options = {}) {
         </g>
         <g transform="translate(2140 83)">
             <rect width="330" height="58" rx="16" fill="#141920" stroke="#29313B" stroke-width="2"/>
-            <text x="22" y="24" fill="#7F8996" font-size="16" font-weight="700" letter-spacing="1.4">KATILIM</text>
+            <text x="22" y="24" fill="#7F8996" font-size="16" font-weight="700" letter-spacing="1.4">${escapeXml(t(language, 'raid.table.attendance'))}</text>
             <text x="22" y="48" fill="#EDF0F4" font-size="27" font-weight="700">${rows.length} / ${capacity}</text>
-            <text x="302" y="37" fill="#B97850" text-anchor="end" font-size="19" font-weight="700">${emptySlots} BOŞ</text>
+            <text x="302" y="37" fill="#B97850" text-anchor="end" font-size="19" font-weight="700">${emptySlots} ${escapeXml(t(language, 'raid.table.empty'))}</text>
         </g>
 
         <rect x="${MARGIN}" y="${TABLE_Y}" width="${TABLE_WIDTH}" height="${TABLE_HEADER_HEIGHT + ROW_HEIGHT * capacity}" rx="20" fill="#0D1116" stroke="#222933" stroke-width="2"/>
@@ -205,8 +215,8 @@ async function renderRaidTable(raid, plan, options = {}) {
         <rect x="${MARGIN}" y="${TABLE_Y + TABLE_HEADER_HEIGHT - 2}" width="${TABLE_WIDTH}" height="2" fill="#B86C43"/>
     `;
 
-    for (let index = 0; index < COLUMN_LABELS.length; index += 1) {
-        svg += `<text x="${columnX[index] + COLUMN_WIDTHS[index] / 2}" y="${TABLE_Y + 51}" class="th" text-anchor="middle">${COLUMN_LABELS[index]}</text>`;
+    for (let index = 0; index < columnLabels.length; index += 1) {
+        svg += `<text x="${columnX[index] + COLUMN_WIDTHS[index] / 2}" y="${TABLE_Y + 51}" class="th" text-anchor="middle">${escapeXml(columnLabels[index])}</text>`;
     }
 
     for (let index = 0; index < capacity; index += 1) {
@@ -240,8 +250,8 @@ async function renderRaidTable(raid, plan, options = {}) {
 
     const footerY = TABLE_Y + TABLE_HEADER_HEIGHT + ROW_HEIGHT * capacity + 24;
     const footerText = warningCount > 0
-        ? `${warningCount} uyarı var. Atanamayan alanlar boş bırakıldı; ayrıntılar raid liderine gönderildi.`
-        : 'Tüm atamalar uygun oyuncu profillerine göre tamamlandı.';
+        ? t(language, 'raid.table.warning_footer', { count: warningCount })
+        : t(language, 'raid.table.success_footer');
     svg += `
         <rect x="${MARGIN}" y="${footerY}" width="${TABLE_WIDTH}" height="54" rx="15" fill="#0F1419" stroke="#222933"/>
         <circle cx="${MARGIN + 28}" cy="${footerY + 27}" r="5" fill="${warningCount > 0 ? '#D8864D' : '#67BE8B'}"/>

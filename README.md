@@ -110,3 +110,80 @@ Yeni görselin dosya adını değiştirirseniz `raid_catalog.js` içindeki ilgil
 - `raid_profiles.json`: Kullanıcıların klas bazlı kalıcı ekipman profilleri.
 
 Bu iki dosyanın düzenli yedeğini alın. Zamanlanmış T−30/T−15/T−5/başlangıç bildirimlerinin çalışması için bot işlemi raid saatine kadar açık kalmalıdır.
+
+## Türkçe / English yerelleştirme
+
+AnkaBot artık kullanıcı tercihlerini `user_language_preferences.json` içinde saklar. Etkileşim dili şu sırayla belirlenir:
+
+1. Kullanıcının raid veya duyuru kartındaki dil menüsünden yaptığı seçim
+2. Kullanıcının Discord etkileşim dili (`tr` / `tr-TR` Türkçe, diğer diller İngilizce)
+3. Sunucunun `config.json` içindeki varsayılan dili
+4. İngilizce yedek dil
+
+Paylaşılan kanal mesajları kullanıcı başına farklı gösterilemediği için sunucunun varsayılan dilini kullanır. Dil menüsünden yapılan seçim, seçilen sürümü yalnızca o kullanıcıya ephemeral/özel yanıt olarak gösterir. Bu Discord API'sinin paylaşılan mesajlar için olan bir sınırlamasıdır.
+
+`config.json` için önerilen ek ayarlar:
+
+```json
+{
+  "defaultLanguage": "tr",
+  "guildLanguages": {
+    "SUNUCU_ID": "tr"
+  }
+}
+```
+
+`guildLanguages` isteğe bağlıdır. Mevcut Türkçe kurulumlarla uyumluluk için `defaultLanguage` verilmezse paylaşılan mesajlarda Türkçe kullanılır.
+
+## Raid duyurusu
+
+Yönetim yetkisine sahip bir görevli `/announcement` komutunu kullanır. Türkçe Discord istemcilerinde komut adı `/duyuru` olarak görünür. Komuttaki isteğe bağlı `raid` alanı en yeni açık raidleri otomatik tamamlamayla listeler.
+
+Akış:
+
+1. Türkçe metni yazın. `{{raid_name}}`, `{{raid_date}}`, `{{raid_time}}` ve `{{raid_relative}}` yer tutucularını kullanabilirsiniz.
+2. Raid seçin; iki dilin tamamını ephemeral önizlemede kontrol edin.
+3. Gerekirse Türkçe veya İngilizce metni düzenleyin ve isteğe bağlı standart satırları ekleyin.
+4. `@here`, `@everyone` veya bildirimsiz yayını seçin.
+5. **Yayınla** düğmesinden sonra gelen son onayı verin.
+
+Önizlemeler toplu bildirim göndermez. Yayın sırasında toplu bildirim seçilmişse hem görevlinin hem de botun `Mention Everyone` izni doğrulanır. Normal kullanıcılar duyuru oluşturamaz fakat yayınlanan duyurunun dil menüsünü kullanabilir.
+
+### Ücretsiz / yerel çeviri
+
+Bu sürüm hiçbir ücretli çeviri veya OpenAI API'sine bağlanmaz. Bir OpenAI anahtarı ortamda bulunsa bile AnkaBot onu okumaz ve API ücreti oluşturamaz.
+
+Tam otomatik çeviri istenirse yalnızca aynı makinede çalışan, Ollama uyumlu bir servis kullanılabilir. Güvenlik ve maliyet garantisi için çeviri URL'si yalnızca `localhost`, `127.0.0.1` veya `::1` olabilir:
+
+```bash
+ANKABOT_LOCAL_TRANSLATION_URL=http://127.0.0.1:11434
+ANKABOT_LOCAL_TRANSLATION_MODEL=KURULU_YEREL_MODEL
+ANKABOT_TRANSLATION_TIMEOUT_MS=30000
+```
+
+Yerel model yapılandırılmamışsa Türkçe taslak kaybolmaz; arayüz durumu bildirir ve görevli İngilizce metni elle girer. Hazır akıllı öneriler her iki dilde yerleşik olduğundan model gerektirmez.
+
+## Eski raid kartlarını güncelleme
+
+Önce yalnızca yapılacak işlemleri görmek için:
+
+```bash
+npm run migrate-localization -- --dry-run
+```
+
+Sonuçları kontrol ettikten sonra:
+
+```bash
+npm run migrate-localization
+```
+
+Betik yalnızca açık raid kayıtlarını ele alır; kanal ve mesaj kimliklerini Discord'da doğrular; yalnızca mevcut bot hesabının yazdığı mesajları düzenler. Kapanmış, silinmiş, bulunamayan veya başka bir kullanıcı/bot tarafından yazılmış mesajları güvenle atlar ve nedenini loglar. Raid, profil veya yoklama verisini silmez.
+
+Yeni komutlar bot başlatılırken mevcut global komut kayıt sistemiyle otomatik yüklenir. Global Discord komutlarının istemcilerde görünmesi biraz zaman alabilir.
+
+## Yeni çalışma verileri
+
+- `user_language_preferences.json`: Kullanıcı dil seçimi ve son bilinen Discord dili
+- `announcements.json`: Taslak ve yayınlanmış duyuruların Türkçe/İngilizce metinleri ile raid/mesaj bağlantıları
+
+Bu dosyalar Git tarafından izlenmez ve ilk kullanımda güvenli şekilde oluşturulur. Şema dönüşümü veya ayrı bir veritabanı kurulumu gerekmez.

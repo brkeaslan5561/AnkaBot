@@ -6,6 +6,7 @@ const {
     findCatalogItem,
     normalizeName
 } = require('./raid_catalog');
+const { t } = require('./localization');
 
 const ASSIGNMENT_BASE = 1_000_000;
 
@@ -241,7 +242,7 @@ function categoryInfo(category) {
     return null;
 }
 
-function applyOverrides(plan, overrides, players, contentType) {
+function applyOverrides(plan, overrides, players, contentType, language = 'tr') {
     if (!overrides || typeof overrides !== 'object') return plan;
     const playerMap = new Map(players.map(player => [String(player.userId), player]));
     const rowMap = new Map(plan.rows.map(row => [String(row.userId), row]));
@@ -263,7 +264,7 @@ function applyOverrides(plan, overrides, players, contentType) {
 
             const item = findCatalogItem(info.catalog, requestedValue);
             if (!item || !owns(player, info.inventory, item)) {
-                overrideWarnings.push(`${row.displayName}: seçilen ${category} artık profilde bulunmuyor.`);
+                overrideWarnings.push(t(language, 'raid.assignment.override_missing', { player: row.displayName, category }));
                 continue;
             }
 
@@ -277,7 +278,7 @@ function applyOverrides(plan, overrides, players, contentType) {
             const mustClear = Math.max(0, conflicts.length - limit + 1);
             for (let index = 0; index < mustClear; index += 1) {
                 conflicts[index][category] = null;
-                overrideWarnings.push(`${conflicts[index].displayName}: ${requestedValue} lider ataması nedeniyle boş bırakıldı.`);
+                overrideWarnings.push(t(language, 'raid.assignment.override_conflict', { player: conflicts[index].displayName, value: requestedValue }));
             }
             row[category] = item.name;
         }
@@ -287,22 +288,22 @@ function applyOverrides(plan, overrides, players, contentType) {
     return plan;
 }
 
-function buildWarnings(rows, capacity, overrideWarnings = []) {
+function buildWarnings(rows, capacity, overrideWarnings = [], language = 'tr') {
     const warnings = [...overrideWarnings];
     const missingCount = Math.max(0, capacity - rows.length);
-    if (missingCount > 0) warnings.push(`${missingCount} kadro yeri boş.`);
+    if (missingCount > 0) warnings.push(t(language, 'raid.assignment.empty_slots', { count: missingCount }));
 
     for (const row of rows) {
-        if (!row.artifact) warnings.push(`${row.displayName}: uygun ve çakışmayan eser bulunamadı.`);
-        if (!row.mount) warnings.push(`${row.displayName}: role uygun binek gücü bulunamadı.`);
-        if (!row.companion) warnings.push(`${row.displayName}: uygun ve çakışmayan yoldaş bulunamadı.`);
-        if (row.role !== 'dps' && !row.aura) warnings.push(`${row.displayName}: role uygun aura bulunamadı.`);
+        if (!row.artifact) warnings.push(t(language, 'raid.assignment.missing_artifact', { player: row.displayName }));
+        if (!row.mount) warnings.push(t(language, 'raid.assignment.missing_mount', { player: row.displayName }));
+        if (!row.companion) warnings.push(t(language, 'raid.assignment.missing_companion', { player: row.displayName }));
+        if (row.role !== 'dps' && !row.aura) warnings.push(t(language, 'raid.assignment.missing_aura', { player: row.displayName }));
     }
 
     return [...new Set(warnings)];
 }
 
-function assignRaid(raid, players, overrides = null) {
+function assignRaid(raid, players, overrides = null, language = 'tr') {
     const contentType = raid.contentType === 'dungeon' ? 'dungeon' : 'trial';
     const capacity = Number(raid.capacity) || (contentType === 'trial' ? 10 : 5);
     const orderedPlayers = [...players]
@@ -334,8 +335,8 @@ function assignRaid(raid, players, overrides = null) {
         createdAt: Date.now()
     };
 
-    applyOverrides(plan, overrides, orderedPlayers, contentType);
-    plan.warnings = buildWarnings(plan.rows, capacity, plan.overrideWarnings || []);
+    applyOverrides(plan, overrides, orderedPlayers, contentType, language);
+    plan.warnings = buildWarnings(plan.rows, capacity, plan.overrideWarnings || [], language);
     delete plan.overrideWarnings;
     return plan;
 }

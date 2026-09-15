@@ -4,6 +4,10 @@ const config = require('./config.json');
 const fs = require('fs');
 const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidZamanlayicisiniBaslat, raidMesajiSilindi, raidMesajKayitlariniSil } = require('./raid.js');
 const { syncCatalogEmojis } = require('./raid_emojis.js');
+const { announcementCommand, handleAnnouncementInteraction } = require('./announcement.js');
+const { configureLocalization, rememberInteractionLocale } = require('./localization.js');
+
+configureLocalization(config);
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages],
@@ -38,7 +42,8 @@ const commands = [
 
     raidKomutu,
     raidOyuncuEkleKomutu,
-    raidDuzenleKomutu
+    raidDuzenleKomutu,
+    announcementCommand
 ].map(command => command.toJSON());
 
 const userSessions = new Map();
@@ -95,6 +100,19 @@ client.on('messageDeleteBulk', messages => {
 
 // ANA ETKİLEŞİM DİNLEYİCİSİ
 client.on('interactionCreate', async interaction => {
+    if (interaction.user?.id && interaction.locale) rememberInteractionLocale(interaction.user.id, interaction.locale);
+
+    if (interaction.isAutocomplete() && interaction.commandName === 'announcement') {
+        return await handleAnnouncementInteraction(interaction);
+    }
+
+    const isAnnouncementInteraction =
+        (interaction.isChatInputCommand() && interaction.commandName === 'announcement') ||
+        (interaction.isModalSubmit() && interaction.customId.startsWith('announcement_')) ||
+        (interaction.isButton() && interaction.customId.startsWith('announcement_')) ||
+        (interaction.isStringSelectMenu() && interaction.customId.startsWith('announcement_'));
+
+    if (isAnnouncementInteraction) return await handleAnnouncementInteraction(interaction);
 
    // --- YENİ AUTOCOMPLETE DİNLEYİCİSİ ---
     if (interaction.isAutocomplete() && (interaction.commandName === 'raid-oyuncu-ekle' || interaction.commandName === 'düzenle')) {
