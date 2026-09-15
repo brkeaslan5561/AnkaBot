@@ -2,6 +2,6 @@
   "token": "DISCORD_BOT_TOKEN",
   "clientId": "DISCORD_APPLICATION_ID",
   "logChannelId": "RAPOR_LOG_KANAL_ID",
-  "defaultLanguage": "tr",
+  "defaultLanguage": "en",
   "guildLanguages": {}
 }

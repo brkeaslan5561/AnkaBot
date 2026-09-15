@@ -34,8 +34,7 @@ function configureLocalization(config = {}) {
 function getGuildLanguage(guildId = null) {
     const guildLanguages = runtimeConfig.guildLanguages || {};
     const configured = guildId ? guildLanguages[String(guildId)] : null;
-    // Existing AnkaBot deployments are Turkish-first; explicit configuration can override this.
-    return normalizeLanguage(configured || runtimeConfig.defaultLanguage || process.env.ANKABOT_DEFAULT_LANGUAGE || 'tr', DEFAULT_LANGUAGE);
+    return normalizeLanguage(configured || runtimeConfig.defaultLanguage || process.env.ANKABOT_DEFAULT_LANGUAGE || DEFAULT_LANGUAGE, DEFAULT_LANGUAGE);
 }
 
 function loadLocaleBundle(language) {

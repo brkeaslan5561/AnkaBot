@@ -144,7 +144,9 @@ function interactionLanguage(interaction) {
 }
 
 function raidLanguage(raid) {
-    return getGuildLanguage(raid?.guildId);
+    return ['tr', 'en'].includes(raid?.displayLanguage)
+        ? raid.displayLanguage
+        : getGuildLanguage(raid?.guildId);
 }
 
 function roleLabel(language, role) {
@@ -544,10 +546,10 @@ function raidButtonRow(disabled = false, language = 'tr') {
 function raidLanguageRow(language = 'tr', disabled = false) {
     const menu = new StringSelectMenuBuilder()
         .setCustomId('raid_language')
-        .setPlaceholder(t(language, 'language.placeholder'))
+        .setPlaceholder(t('en', 'language.placeholder'))
         .setDisabled(disabled)
         .addOptions(
-            { label: t(language, 'language.automatic'), value: 'auto', emoji: '🌐' },
+            { label: t('en', 'language.automatic'), value: 'auto', emoji: '🌐' },
             { label: 'Türkçe', value: 'tr', emoji: '🇹🇷' },
             { label: 'English', value: 'en', emoji: '🇬🇧' }
         );
@@ -1644,6 +1646,7 @@ async function handleRaidCreation(interaction) {
             guildId: interaction.guildId,
             creatorId: interaction.user.id,
             creatorMention: `<@${interaction.user.id}>`,
+            displayLanguage: language,
             tanklar: [], healerlar: [], dpsler: [], yedekler: [],
             siradakiSira: 1,
             planOverrides: {},
@@ -1671,17 +1674,10 @@ async function handleRegistration(interaction) {
         const raid = raidHafizasi.get(String(messageId));
         if (!raid) return privateReply(interaction, { content: t(language, 'raid.manual.not_found') });
         const label = selected === 'auto' ? t(language, 'language.auto_name') : selected === 'tr' ? 'Türkçe' : 'English';
-        const content = t(language, 'language.raid_details', {
-            raidName: raid.zindan || raid.zindanKodu,
-            type: t(language, `raid.type.${raid.contentType === 'dungeon' ? 'dungeon' : 'trial'}`),
-            joined: mainCount(raid),
-            capacity: raid.capacity,
-            reserves: raid.yedekler.length,
-            raidDate: formatDiscordTimestamp(raid.unixZamani, 'F'),
-            raidRelative: formatDiscordTimestamp(raid.unixZamani, 'R'),
-            description: raid.aciklama || t(language, 'raid.creation.no_description')
+        return privateReply(interaction, {
+            content: t(language, 'language.saved', { language: label }),
+            embeds: [raidEmbedOlustur(raid, language)]
         });
-        return privateReply(interaction, { content: `${t(language, 'language.saved', { language: label })}\n\n${content}` });
     }
 
     if (interaction.isButton() && (interaction.customId.startsWith('raid_join_') || interaction.customId.startsWith('raid_bas_'))) {
@@ -2048,6 +2044,7 @@ module.exports = {
         raidAutocompleteChoices,
         kayipDiscordKaynagiHatasi,
         generatePlan,
+        raidLanguage,
         raidEmbedOlustur,
         raidButtonRow,
         raidLanguageRow,

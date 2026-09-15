@@ -91,10 +91,10 @@ function textModal(draft, language, uiLanguage, initial = false) {
         .setLabel(t(uiLanguage, isTurkish ? 'announcement.turkish_label' : 'announcement.english_label'))
         .setStyle(TextInputStyle.Paragraph)
         .setMinLength(1)
-        .setMaxLength(2400)
+        .setMaxLength(1600)
         .setRequired(true);
     const current = isTurkish ? draft.turkishText : draft.englishText;
-    if (current) input.setValue(String(current).slice(0, 2400));
+    if (current) input.setValue(String(current).slice(0, 1600));
     else if (isTurkish) input.setPlaceholder(t(uiLanguage, 'announcement.turkish_placeholder').slice(0, 100));
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     return modal;
@@ -167,39 +167,30 @@ function draftPayload(draft, uiLanguage, notice = null) {
 function languageMenu(customId, uiLanguage) {
     return new StringSelectMenuBuilder()
         .setCustomId(customId)
-        .setPlaceholder(t(uiLanguage, 'language.placeholder'))
+        .setPlaceholder(t('en', 'language.placeholder'))
         .addOptions(
-            { label: t(uiLanguage, 'language.automatic'), value: 'auto', emoji: '🌐' },
+            { label: t('en', 'language.automatic'), value: 'auto', emoji: '🌐' },
             { label: 'Türkçe', value: 'tr', emoji: '🇹🇷' },
             { label: 'English', value: 'en', emoji: '🇬🇧' }
         );
 }
 
-function publishedEmbed(record, language, raidOverride = null) {
+function escapeMassMentions(text) {
+    return String(text || '').replace(/@(here|everyone)/gi, '@\u200b$1');
+}
+
+function publishedText(record, language, raidOverride = null) {
     const raid = raidOverride || (record.raidId ? getRaid(record.raidId) : null);
     const source = language === 'tr' ? record.turkishText : record.englishText;
-    const description = resolveRaidTemplateText(source, raid || {}, record.raidId);
-    const raidName = raid?.zindan || raid?.zindanKodu || 'Raid';
-    const embed = new EmbedBuilder()
-        .setColor('#D97706')
-        .setTitle(t(language, 'announcement.version_title', { raidName }))
-        .setDescription(description || '—')
-        .setFooter({ text: t(language, 'announcement.version_footer') })
-        .setTimestamp(new Date(record.createdAt));
-    if (raid?.unixZamani) {
-        embed.addFields({
-            name: `📅 ${t(language, 'announcement.raid')}`,
-            value: `${formatDiscordTimestamp(raid.unixZamani, 'F')} · ${formatDiscordTimestamp(raid.unixZamani, 'R')}`
-        });
-    }
-    return embed;
+    return escapeMassMentions(resolveRaidTemplateText(source, raid || {}, record.raidId) || '—');
 }
 
 function buildPublishedMessagePayload(record, language, raidOverride = null) {
     const pingText = record.ping === 'here' ? '@here' : record.ping === 'everyone' ? '@everyone' : '';
+    const body = publishedText(record, language, raidOverride);
+    const languageHint = `-# ${t('en', 'announcement.version_footer')}`;
     return {
-        content: pingText || null,
-        embeds: [publishedEmbed(record, language, raidOverride)],
+        content: [pingText, body, languageHint].filter(Boolean).join('\n\n'),
         components: [new ActionRowBuilder().addComponents(languageMenu(`announcement_language_${record.id}`, language))],
         allowedMentions: pingText ? { parse: ['everyone'] } : { parse: [] }
     };
@@ -265,6 +256,7 @@ async function beginAnnouncement(interaction) {
         turkishText: '',
         englishText: '',
         ping: 'here',
+        displayLanguage: uiLanguage,
         translationError: null,
         createdAt: now,
         updatedAt: now
@@ -302,7 +294,9 @@ async function publishDraft(interaction, draft, uiLanguage) {
     try {
         const channel = await interaction.client.channels.fetch(draft.channelId);
         if (!channel?.send) throw new Error('Announcement channel is unavailable.');
-        const sharedLanguage = getGuildLanguage(draft.guildId);
+        const sharedLanguage = ['tr', 'en'].includes(draft.displayLanguage)
+            ? draft.displayLanguage
+            : getGuildLanguage(draft.guildId);
         const pingText = draft.ping === 'here' ? '@here' : draft.ping === 'everyone' ? '@everyone' : '';
         if (pingText) {
             const officerCanMention = interaction.memberPermissions?.has(PermissionFlagsBits.MentionEveryone);
@@ -311,7 +305,11 @@ async function publishDraft(interaction, draft, uiLanguage) {
                 return interaction.editReply(draftPayload(draft, uiLanguage, t(uiLanguage, 'announcement.mass_mention_forbidden')));
             }
         }
-        const message = await channel.send(buildPublishedMessagePayload(draft, sharedLanguage, raidForDraft(draft)));
+        const publishedPayload = buildPublishedMessagePayload(draft, sharedLanguage, raidForDraft(draft));
+        if (publishedPayload.content.length > 2000) {
+            return interaction.editReply(draftPayload(draft, uiLanguage, t(uiLanguage, 'announcement.too_long')));
+        }
+        const message = await channel.send(publishedPayload);
         draft = updateAnnouncement(draft.id, {
             status: 'published',
             messageId: message.id,
@@ -341,9 +339,15 @@ async function handleAnnouncementComponent(interaction) {
         setUserLanguage(interaction.user.id, selected, interaction.locale);
         uiLanguage = languageForInteraction(interaction);
         const label = selected === 'auto' ? t(uiLanguage, 'language.auto_name') : selected === 'tr' ? 'Türkçe' : 'English';
+        const version = publishedText(record, uiLanguage);
+        const saved = t(uiLanguage, 'language.saved', { language: label });
+        const content = `${saved}\n\n${version}`;
         return interaction.reply(privatePayload({
-            content: t(uiLanguage, 'language.saved', { language: label }),
-            embeds: [publishedEmbed(record, uiLanguage)]
+            content: content.length <= 2000
+                ? content
+                : version.length <= 2000
+                    ? version
+                    : t(uiLanguage, 'announcement.too_long')
         }));
     }
 
@@ -437,14 +441,15 @@ module.exports = {
     handleAnnouncementInteraction,
     handleAnnouncementAutocomplete,
     languageMenu,
-    publishedEmbed,
+    publishedText,
     buildPublishedMessagePayload,
     getAnnouncement,
     _test: {
         safePingLabel,
         resolvedVersions,
         draftEmbeds,
-        publishedEmbed,
+        escapeMassMentions,
+        publishedText,
         buildPublishedMessagePayload,
         announcementStore,
         translationService

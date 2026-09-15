@@ -20,9 +20,10 @@ test('user preference overrides locale', () => {
   assert.equal(result, 'tr');
 });
 
-test('automatic language defaults non-Turkish users to English', () => {
+test('automatic language follows Turkish Discord locale and otherwise uses English', () => {
   assert.equal(resolveUserLanguage({ userId: '2', locale: 'en-US' }, 'tr'), 'en');
   assert.equal(resolveUserLanguage({ userId: '3', locale: 'fr-FR' }, 'tr'), 'en');
+  assert.equal(resolveUserLanguage({ userId: '4', locale: 'tr-TR' }, 'en'), 'tr');
 });
 
 test('Discord timestamps format correctly', () => {

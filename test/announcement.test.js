@@ -17,10 +17,14 @@ test('announcement command is management-only and has Turkish localization', () 
 });
 
 test('announcement and raid language selectors expose automatic, Turkish, and English', () => {
-    const announcementOptions = languageMenu('announcement_language_test', 'en').toJSON().options.map(option => option.value);
-    const raidOptions = raidTest.raidLanguageRow('tr').toJSON().components[0].options.map(option => option.value);
-    assert.deepEqual(announcementOptions, ['auto', 'tr', 'en']);
-    assert.deepEqual(raidOptions, ['auto', 'tr', 'en']);
+    const announcementMenu = languageMenu('announcement_language_test', 'tr').toJSON();
+    const raidMenu = raidTest.raidLanguageRow('tr').toJSON().components[0];
+    assert.deepEqual(announcementMenu.options.map(option => option.value), ['auto', 'tr', 'en']);
+    assert.deepEqual(raidMenu.options.map(option => option.value), ['auto', 'tr', 'en']);
+    assert.equal(announcementMenu.placeholder, '🌐 Language');
+    assert.equal(raidMenu.placeholder, '🌐 Language');
+    assert.equal(announcementMenu.options[0].label, '🌐 Automatic (Discord language)');
+    assert.equal(raidMenu.options[0].label, '🌐 Automatic (Discord language)');
 });
 
 test('preview mass mentions are escaped and cannot ping', () => {
@@ -36,9 +40,12 @@ test('published announcement resolves raid timestamps and explicitly allows only
     };
     const raid = { zindan: 'Master Test', unixZamani: 2000000000 };
     const payload = buildPublishedMessagePayload(record, 'en', raid);
-    assert.equal(payload.content, '@here');
+    assert.equal(
+        payload.content,
+        '@here\n\nMaster Test <t:2000000000:F>\n\n-# To view the other language privately, use the language selector below.'
+    );
     assert.deepEqual(payload.allowedMentions, { parse: ['everyone'] });
-    assert.match(payload.embeds[0].toJSON().description, /Master Test <t:2000000000:F>/);
+    assert.equal(payload.embeds, undefined);
 });
 
 test('published Turkish and English selectors render the stored matching version', () => {
@@ -47,8 +54,20 @@ test('published Turkish and English selectors render the stored matching version
         turkishText: 'Türkçe metin', englishText: 'English text'
     };
     const raid = { zindan: 'Raid', unixZamani: 2000000000 };
-    assert.equal(_test.publishedEmbed(record, 'tr', raid).toJSON().description, 'Türkçe metin');
-    assert.equal(_test.publishedEmbed(record, 'en', raid).toJSON().description, 'English text');
+    assert.equal(_test.publishedText(record, 'tr', raid), 'Türkçe metin');
+    assert.equal(_test.publishedText(record, 'en', raid), 'English text');
+});
+
+test('announcement body cannot create an extra mass mention', () => {
+    const record = {
+        id: 'announcement', raidId: null, ping: 'here', createdAt: new Date().toISOString(),
+        turkishText: '@everyone test', englishText: '@everyone test'
+    };
+    const payload = buildPublishedMessagePayload(record, 'en');
+    assert.equal(
+        payload.content,
+        '@here\n\n@\u200beveryone test\n\n-# To view the other language privately, use the language selector below.'
+    );
 });
 
 test('translation provider only accepts explicitly configured loopback URLs', () => {

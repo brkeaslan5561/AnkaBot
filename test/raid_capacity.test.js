@@ -162,6 +162,21 @@ test('Discord raid kartı ve profil seçim bileşenleri geçerli JSON üretir', 
     assert.equal(dateRows.length, 3);
 });
 
+test('raid paylaşım dili oluşturucunun çözümlenen dilini kullanır ve temel alanları çevirir', () => {
+    const raid = emptyRaid('trial');
+    raid.displayLanguage = 'en';
+    raid.tarih = '<t:1784311200:F>';
+    raid.aciklama = 'Test description';
+
+    assert.equal(_test.raidLanguage(raid), 'en');
+    const english = _test.raidEmbedOlustur(raid).toJSON();
+    const turkish = _test.raidEmbedOlustur(raid, 'tr').toJSON();
+    assert.match(english.description, /\*\*TYPE:\*\*/);
+    assert.match(english.description, /\*\*DATE:\*\*/);
+    assert.match(turkish.description, /\*\*TÜR:\*\*/);
+    assert.match(turkish.description, /\*\*TARİH:\*\*/);
+});
+
 test('envanter seçenekleri role göre filtrelenir ve eser tooltipi içermez', () => {
     const dpsMounts = selectOptions('mounts', { role: 'dps' });
     const healerMounts = selectOptions('mounts', { role: 'heal' });

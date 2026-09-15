@@ -113,27 +113,28 @@ Bu iki dosyanın düzenli yedeğini alın. Zamanlanmış T−30/T−15/T−5/ba�
 
 ## Türkçe / English yerelleştirme
 
-AnkaBot artık kullanıcı tercihlerini `user_language_preferences.json` içinde saklar. Etkileşim dili şu sırayla belirlenir:
+AnkaBot kullanıcı tercihlerini `user_language_preferences.json` içinde saklar. Etkileşim dili şu sırayla belirlenir:
 
-1. Kullanıcının raid veya duyuru kartındaki dil menüsünden yaptığı seçim
-2. Kullanıcının Discord etkileşim dili (`tr` / `tr-TR` Türkçe, diğer diller İngilizce)
-3. Sunucunun `config.json` içindeki varsayılan dili
-4. İngilizce yedek dil
+1. Kullanıcının raid veya duyuru kartındaki dil menüsünden yaptığı açık Türkçe/İngilizce seçimi
+2. Kullanıcının Discord etkileşim dili (`tr` / `tr-TR` Türkçe, diğer bütün diller İngilizce)
+3. Discord dili bulunamazsa İngilizce
 
-Paylaşılan kanal mesajları kullanıcı başına farklı gösterilemediği için sunucunun varsayılan dilini kullanır. Dil menüsünden yapılan seçim, seçilen sürümü yalnızca o kullanıcıya ephemeral/özel yanıt olarak gösterir. Bu Discord API'sinin paylaşılan mesajlar için olan bir sınırlamasıdır.
+Kullanıcı **Automatic (Discord language)** seçeneğini seçerek elle yaptığı tercihi kaldırabilir ve yeniden Discord diline göre otomatik seçime dönebilir.
+
+Paylaşılan kanal mesajları kullanıcı başına farklı gösterilemediği için yeni raid ve duyurular ilk olarak onları oluşturan kullanıcının kayıtlı tercihinde veya Discord dilinde gösterilir. Dil menüsünden yapılan seçim, raid kartının veya duyuru metninin seçilen dildeki tam sürümünü yalnızca o kullanıcıya ephemeral/özel yanıt olarak gösterir. Bu Discord API'sinin paylaşılan mesajlar için olan bir sınırlamasıdır. Paylaşılan duyurunun altındaki dil yönlendirmesi ve dil seçici her zaman İngilizcedir.
 
 `config.json` için önerilen ek ayarlar:
 
 ```json
 {
-  "defaultLanguage": "tr",
+  "defaultLanguage": "en",
   "guildLanguages": {
-    "SUNUCU_ID": "tr"
+    "SUNUCU_ID": "en"
   }
 }
 ```
 
-`guildLanguages` isteğe bağlıdır. Mevcut Türkçe kurulumlarla uyumluluk için `defaultLanguage` verilmezse paylaşılan mesajlarda Türkçe kullanılır.
+`guildLanguages` isteğe bağlıdır. `defaultLanguage` verilmezse İngilizce kullanılır. Bu ayarlar özellikle dil bilgisi bulunmayan eski kayıtlar için yedektir; kullanıcıların açık dil tercihleri her zaman önceliklidir.
 
 ## Raid duyurusu
 
@@ -147,7 +148,7 @@ Akış:
 4. `@here`, `@everyone` veya bildirimsiz yayını seçin.
 5. **Yayınla** düğmesinden sonra gelen son onayı verin.
 
-Önizlemeler toplu bildirim göndermez. Yayın sırasında toplu bildirim seçilmişse hem görevlinin hem de botun `Mention Everyone` izni doğrulanır. Normal kullanıcılar duyuru oluşturamaz fakat yayınlanan duyurunun dil menüsünü kullanabilir.
+Önizlemeler toplu bildirim göndermez. Yayınlanan duyuru embed yerine doğrudan düz Discord mesajı olarak paylaşılır. Yayın sırasında toplu bildirim seçilmişse hem görevlinin hem de botun `Mention Everyone` izni doğrulanır. Normal kullanıcılar duyuru oluşturamaz fakat yayınlanan duyurunun dil menüsünü kullanarak tam Türkçe veya İngilizce metni özel yanıt olarak görebilir.
 
 ### Ücretsiz / yerel çeviri
 
