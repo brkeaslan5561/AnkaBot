@@ -1531,7 +1531,7 @@ async function handleRaidCreation(interaction) {
         const language = interactionLanguage(interaction);
         const selected = interaction.values[0];
         if (selected === 'custom') {
-            raidKurulumHafizasi.set(interaction.user.id, { gun: null, ay: null, saat: null, language });
+            raidKurulumHafizasi.set(interaction.user.id, { gun: null, ay: null, saat: null });
             const typeMenu = new StringSelectMenuBuilder()
                 .setCustomId('raid_custom_type')
                 .setPlaceholder(t(language, 'raid.creation.custom_type_placeholder'))
@@ -1550,14 +1550,13 @@ async function handleRaidCreation(interaction) {
             gun: null,
             ay: null,
             saat: null
-            , language
         });
         return interaction.update({ content: t(language, 'raid.creation.choose_date', { raidName: item.label }), components: dateComponents({}, language) });
     }
 
     if (interaction.isStringSelectMenu() && interaction.customId === 'raid_custom_type') {
         const session = raidKurulumHafizasi.get(interaction.user.id) || {};
-        const language = session.language || interactionLanguage(interaction);
+        const language = interactionLanguage(interaction);
         session.contentType = interaction.values[0];
         raidKurulumHafizasi.set(interaction.user.id, session);
         const modal = new ModalBuilder().setCustomId('raid_custom_name_modal').setTitle(t(language, 'raid.creation.custom_modal_title'));
@@ -1573,7 +1572,7 @@ async function handleRaidCreation(interaction) {
 
     if (interaction.isModalSubmit() && interaction.customId === 'raid_custom_name_modal') {
         const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = session?.language || interactionLanguage(interaction);
+        const language = interactionLanguage(interaction);
         if (!session) return privateReply(interaction, { content: t(language, 'common.expired') });
         const name = interaction.fields.getTextInputValue('raid_custom_name').trim();
         session.zindanKodu = name;
@@ -1584,7 +1583,7 @@ async function handleRaidCreation(interaction) {
 
     if (interaction.isStringSelectMenu() && (interaction.customId.startsWith('raid_date_day_') || interaction.customId === 'raid_date_month')) {
         const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = session?.language || interactionLanguage(interaction);
+        const language = interactionLanguage(interaction);
         if (!session) return privateReply(interaction, { content: t(language, 'common.expired') });
         if (interaction.customId.startsWith('raid_date_day_')) session.gun = interaction.values[0];
         else session.ay = interaction.values[0];
@@ -1603,7 +1602,7 @@ async function handleRaidCreation(interaction) {
 
     if (interaction.isStringSelectMenu() && interaction.customId === 'raid_date_time') {
         const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = session?.language || interactionLanguage(interaction);
+        const language = interactionLanguage(interaction);
         if (!session) return privateReply(interaction, { content: t(language, 'common.expired') });
         session.saat = interaction.values[0];
         raidKurulumHafizasi.set(interaction.user.id, session);
@@ -1621,9 +1620,9 @@ async function handleRaidCreation(interaction) {
     if (interaction.isModalSubmit() && interaction.customId === 'raid_description_modal') {
         await interaction.deferUpdate();
         const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = session?.language || interactionLanguage(interaction);
+        const language = interactionLanguage(interaction);
         if (!session) return interaction.editReply({ content: t(language, 'common.expired'), components: [] });
-        const description = interaction.fields.getTextInputValue('raid_description') || t(getGuildLanguage(interaction.guildId), 'raid.creation.no_description');
+        const description = interaction.fields.getTextInputValue('raid_description') || t(language, 'raid.creation.no_description');
         const created = istanbulZamaniOlustur(session.gun, session.ay, session.saat, null, true);
         const checked = istanbulParcalariAl(created.timestamp);
         if (checked.gun !== Number(session.gun) || checked.ay !== Number(session.ay) || checked.saat !== session.saat) {

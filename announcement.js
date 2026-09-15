@@ -15,7 +15,6 @@ const {
 const { JsonStore } = require('./storage');
 const {
     t,
-    getGuildLanguage,
     languageForInteraction,
     resolveRaidTemplateText,
     formatDiscordTimestamp
@@ -255,7 +254,6 @@ async function beginAnnouncement(interaction) {
         turkishText: '',
         englishText: '',
         ping: 'here',
-        displayLanguage: uiLanguage,
         translationError: null,
         createdAt: now,
         updatedAt: now
@@ -293,9 +291,7 @@ async function publishDraft(interaction, draft, uiLanguage) {
     try {
         const channel = await interaction.client.channels.fetch(draft.channelId);
         if (!channel?.send) throw new Error('Announcement channel is unavailable.');
-        const sharedLanguage = ['tr', 'en'].includes(draft.displayLanguage)
-            ? draft.displayLanguage
-            : getGuildLanguage(draft.guildId);
+        const sharedLanguage = uiLanguage;
         const pingText = draft.ping === 'here' ? '@here' : draft.ping === 'everyone' ? '@everyone' : '';
         if (pingText) {
             const officerCanMention = interaction.memberPermissions?.has(PermissionFlagsBits.MentionEveryone);

@@ -119,7 +119,7 @@ AnkaBot son bilinen Discord dillerini `user_language_preferences.json` içinde s
 2. Discord dili bulunamazsa son bilinen Discord dili
 3. Hiç dil bilgisi yoksa İngilizce
 
-Dil menüsündeki Türkçe ve İngilizce seçenekleri yalnızca seçilen sürümü kullanıcıya özel olarak gösterir; gelecekteki raidlerin dilini kalıcı olarak değiştirmez. **Automatic (Discord language)** güncel Discord dilindeki sürümü gösterir.
+Raid ve duyuru dil menülerindeki Türkçe ve İngilizce seçenekleri yalnızca seçilen sürümü kullanıcıya özel olarak gösterir; gelecekteki paylaşımların dilini kalıcı olarak değiştirmez. **Automatic (Discord language)** güncel Discord dilindeki sürümü gösterir.
 
 Paylaşılan kanal mesajları kullanıcı başına farklı gösterilemediği için yeni raid ve duyurular ilk olarak onları oluşturan kullanıcının güncel Discord dilinde gösterilir. Dil menüsünden yapılan seçim, raid kartının veya duyuru metninin seçilen dildeki tam sürümünü yalnızca o kullanıcıya ephemeral/özel yanıt olarak gösterir. Bu Discord API'sinin paylaşılan mesajlar için olan bir sınırlamasıdır. Paylaşılan duyurunun altındaki dil yönlendirmesi ve dil seçici her zaman İngilizcedir.
 
