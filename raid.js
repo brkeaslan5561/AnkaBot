@@ -18,7 +18,8 @@ const { assignRaid, inventoryOf } = require('./raid_assignment');
 const { renderRaidTable } = require('./raid_table');
 const {
     t,
-    getGuildLanguage,
+    getSharedLanguage,
+    setUserLanguage,
     languageForInteraction,
     languageForUser,
     formatDiscordTimestamp
@@ -136,16 +137,25 @@ const raidDuzenleKomutu = new SlashCommandBuilder()
     .addIntegerOption(option => option.setName('gun').setNameLocalizations({ 'en-US': 'day', 'en-GB': 'day' }).setDescription('Yeni gün').setDescriptionLocalizations({ 'en-US': 'New day', 'en-GB': 'New day' }).setMinValue(1).setMaxValue(31).setRequired(false))
     .addIntegerOption(option => option.setName('ay').setNameLocalizations({ 'en-US': 'month', 'en-GB': 'month' }).setDescription('Yeni ay').setDescriptionLocalizations({ 'en-US': 'New month', 'en-GB': 'New month' }).setMinValue(1).setMaxValue(12).setRequired(false))
     .addStringOption(option => option.setName('saat').setNameLocalizations({ 'en-US': 'time', 'en-GB': 'time' }).setDescription('Yeni saat, örn. 21:30').setDescriptionLocalizations({ 'en-US': 'New time, e.g. 21:30', 'en-GB': 'New time, e.g. 21:30' }).setRequired(false))
-    .addStringOption(option => option.setName('aciklama').setNameLocalizations({ 'en-US': 'description', 'en-GB': 'description' }).setDescription('Yeni açıklama').setDescriptionLocalizations({ 'en-US': 'New description', 'en-GB': 'New description' }).setRequired(false));
+    .addStringOption(option => option.setName('aciklama').setNameLocalizations({ 'en-US': 'description', 'en-GB': 'description' }).setDescription('Kişisel bot dilinizde yeni açıklama').setDescriptionLocalizations({ 'en-US': 'New description in your preferred bot language', 'en-GB': 'New description in your preferred bot language' }).setMaxLength(500).setRequired(false))
+    .addStringOption(option => option.setName('aciklama-tr').setDescription('Türkçe açıklama').setDescriptionLocalizations({ 'en-US': 'Turkish description', 'en-GB': 'Turkish description' }).setMaxLength(500))
+    .addStringOption(option => option.setName('aciklama-en').setDescription('İngilizce açıklama').setDescriptionLocalizations({ 'en-US': 'English description', 'en-GB': 'English description' }).setMaxLength(500));
 
 function interactionLanguage(interaction) {
     return languageForInteraction(interaction);
 }
 
 function raidLanguage(raid) {
-    return ['tr', 'en'].includes(raid?.displayLanguage)
-        ? raid.displayLanguage
-        : getGuildLanguage(raid?.guildId);
+    return getSharedLanguage(raid?.guildId, raid?.channelId);
+}
+
+function raidDescription(raid, language) {
+    const descriptions = raid.descriptions;
+    if (!descriptions) return raid.aciklama || t(language, 'raid.creation.no_description');
+    if (language === 'both') {
+        return ['tr', 'en'].map(code => `**${code === 'tr' ? 'Türkçe' : 'English'}:** ${descriptions[code] || t(code, 'raid.description.missing')}`).join('\n');
+    }
+    return descriptions[language] || t(language, 'raid.description.missing');
 }
 
 function roleLabel(language, role) {
@@ -522,7 +532,7 @@ function raidEmbedOlustur(raid, language = raidLanguage(raid)) {
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
-        .setDescription(`## ${linkedTitle}\n\n**${t(language, 'raid.embed.type')}:** ${typeLabel}\n**${t(language, 'raid.embed.attendance')}:** ${joined}/${raid.capacity} • **${t(language, 'raid.embed.reserve')}:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **${t(language, 'raid.embed.date')}:**\n ${raid.tarih}\n\n<:zaciklama:1527641028171923537> **${t(language, 'raid.embed.description')}:**\n ${raid.aciklama}${statusLine}`)
+        .setDescription(`## ${linkedTitle}\n\n**${t(language, 'raid.embed.type')}:** ${typeLabel}\n**${t(language, 'raid.embed.attendance')}:** ${joined}/${raid.capacity} • **${t(language, 'raid.embed.reserve')}:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **${t(language, 'raid.embed.date')}:**\n ${raid.tarih}\n\n<:zaciklama:1527641028171923537> **${t(language, 'raid.embed.description')}:**\n ${raidDescription(raid, language)}${statusLine}`)
         .addFields(
             { name: `<:ztank:1527640905073295440> ${roleLabel(language, 'tank')} (${raid.tanklar.length})`, value: listText(raid.tanklar, false, language), inline: true },
             { name: `<:zhealer:1527640985520312440> ${roleLabel(language, 'heal')} (${raid.healerlar.length})`, value: listText(raid.healerlar, false, language), inline: true },
@@ -545,10 +555,10 @@ function raidButtonRow(disabled = false, language = 'tr') {
 function raidLanguageRow(language = 'tr', disabled = false) {
     const menu = new StringSelectMenuBuilder()
         .setCustomId('raid_language')
-        .setPlaceholder(t('en', 'language.placeholder'))
+        .setPlaceholder('🌐 Dil / Language')
         .setDisabled(disabled)
         .addOptions(
-            { label: t('en', 'language.automatic'), value: 'auto', emoji: '🌐' },
+            { label: 'Otomatik / Automatic (Discord)', value: 'auto', emoji: '🌐' },
             { label: 'Türkçe', value: 'tr', emoji: '🇹🇷' },
             { label: 'English', value: 'en', emoji: '🇬🇧' }
         );
@@ -1467,8 +1477,10 @@ async function raidDuzenleKomutuYonet(interaction) {
     const newMonth = interaction.options.getInteger('ay');
     const newTime = interaction.options.getString('saat');
     const newDescription = interaction.options.getString('aciklama');
+    const newTurkish = interaction.options.getString('aciklama-tr');
+    const newEnglish = interaction.options.getString('aciklama-en');
     const dateChanges = newDay !== null || newMonth !== null || newTime !== null;
-    if (!dateChanges && newDescription === null) return interaction.editReply(t(language, 'raid.edit.no_fields'));
+    if (!dateChanges && newDescription === null && newTurkish === null && newEnglish === null) return interaction.editReply(t(language, 'raid.edit.no_fields'));
     if (newTime !== null && !saatFormatiniKontrolEt(newTime)) return interaction.editReply(t(language, 'raid.edit.time_format'));
 
     if (dateChanges) {
@@ -1500,7 +1512,15 @@ async function raidDuzenleKomutuYonet(interaction) {
         raid.attendanceDraftAbsentIds = [];
         raid.attendanceResult = null;
     }
-    if (newDescription !== null) raid.aciklama = newDescription.trim() || t(raidLanguage(raid), 'raid.creation.no_description');
+    if (newDescription !== null || newTurkish !== null || newEnglish !== null) {
+        if (!raid.descriptions) {
+            const originalLanguage = ['tr', 'en'].includes(raid.displayLanguage) ? raid.displayLanguage : 'tr';
+            raid.descriptions = { [originalLanguage]: raid.aciklama || '' };
+        }
+        if (newDescription !== null) raid.descriptions[language] = newDescription.trim();
+        if (newTurkish !== null) raid.descriptions.tr = newTurkish.trim();
+        if (newEnglish !== null) raid.descriptions.en = newEnglish.trim();
+    }
     saveRaid(messageId, raid);
     await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
     return interaction.editReply(t(language, 'raid.edit.success', { raidName: raid.zindan }));
@@ -1607,13 +1627,13 @@ async function handleRaidCreation(interaction) {
         session.saat = interaction.values[0];
         raidKurulumHafizasi.set(interaction.user.id, session);
         const modal = new ModalBuilder().setCustomId('raid_description_modal').setTitle(t(language, 'raid.creation.description_title'));
-        const input = new TextInputBuilder()
-            .setCustomId('raid_description')
-            .setLabel(t(language, 'raid.creation.description_label'))
-            .setStyle(TextInputStyle.Paragraph)
-            .setMaxLength(500)
-            .setRequired(false);
-        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        for (const code of [language, language === 'tr' ? 'en' : 'tr']) {
+            const input = new TextInputBuilder()
+                .setCustomId(`raid_description_${code}`)
+                .setLabel(code === 'tr' ? 'Türkçe açıklama (isteğe bağlı)' : 'English description (optional)')
+                .setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(false);
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
+        }
         return interaction.showModal(modal);
     }
 
@@ -1622,7 +1642,17 @@ async function handleRaidCreation(interaction) {
         const session = raidKurulumHafizasi.get(interaction.user.id);
         const language = interactionLanguage(interaction);
         if (!session) return interaction.editReply({ content: t(language, 'common.expired'), components: [] });
-        const description = interaction.fields.getTextInputValue('raid_description') || t(language, 'raid.creation.no_description');
+        // Accept already-open modals from the previous version as well.
+        const descriptions = interaction.fields.fields.has('raid_description')
+            ? { [language]: interaction.fields.getTextInputValue('raid_description').trim() }
+            : {
+                tr: interaction.fields.getTextInputValue('raid_description_tr').trim(),
+                en: interaction.fields.getTextInputValue('raid_description_en').trim()
+            };
+        if (!descriptions.tr && !descriptions.en) {
+            descriptions.tr = t('tr', 'raid.creation.no_description');
+            descriptions.en = t('en', 'raid.creation.no_description');
+        }
         const created = istanbulZamaniOlustur(session.gun, session.ay, session.saat, null, true);
         const checked = istanbulParcalariAl(created.timestamp);
         if (checked.gun !== Number(session.gun) || checked.ay !== Number(session.ay) || checked.saat !== session.saat) {
@@ -1634,7 +1664,7 @@ async function handleRaidCreation(interaction) {
             contentType: session.contentType,
             capacity: capacityForType(session.contentType),
             tarih: discordTarihMetniOlustur(created.timestamp),
-            aciklama: description,
+            descriptions,
             gun: String(session.gun),
             ay: String(session.ay),
             yil: created.year,
@@ -1644,7 +1674,7 @@ async function handleRaidCreation(interaction) {
             guildId: interaction.guildId,
             creatorId: interaction.user.id,
             creatorMention: `<@${interaction.user.id}>`,
-            displayLanguage: language,
+            displayLanguage: getSharedLanguage(interaction.guildId, interaction.channelId),
             tanklar: [], healerlar: [], dpsler: [], yedekler: [],
             siradakiSira: 1,
             planOverrides: {},
@@ -1666,9 +1696,8 @@ async function handleRaidCreation(interaction) {
 async function handleRegistration(interaction) {
     if (interaction.isStringSelectMenu() && interaction.customId === 'raid_language') {
         const selected = interaction.values[0];
-        const language = selected === 'tr' || selected === 'en'
-            ? selected
-            : interactionLanguage(interaction);
+        setUserLanguage(interaction.user.id, selected, interaction.locale);
+        const language = interactionLanguage(interaction);
         const messageId = interaction.message.id;
         const raid = raidHafizasi.get(String(messageId));
         if (!raid) return privateReply(interaction, { content: t(language, 'raid.manual.not_found') });
@@ -2044,6 +2073,7 @@ module.exports = {
         kayipDiscordKaynagiHatasi,
         generatePlan,
         raidLanguage,
+        raidDescription,
         raidEmbedOlustur,
         raidButtonRow,
         raidLanguageRow,

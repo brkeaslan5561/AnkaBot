@@ -162,9 +162,9 @@ test('Discord raid kartı ve profil seçim bileşenleri geçerli JSON üretir', 
     assert.equal(dateRows.length, 3);
 });
 
-test('raid paylaşım dili oluşturucunun çözümlenen dilini kullanır ve temel alanları çevirir', () => {
+test('raid paylaşım dili oluşturucudan bağımsızdır ve kişisel görünüm temel alanları çevirir', () => {
     const raid = emptyRaid('trial');
-    raid.displayLanguage = 'en';
+    raid.displayLanguage = 'tr';
     raid.tarih = '<t:1784311200:F>';
     raid.aciklama = 'Test description';
 

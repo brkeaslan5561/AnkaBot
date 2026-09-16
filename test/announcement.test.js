@@ -21,10 +21,10 @@ test('announcement and raid language selectors expose automatic, Turkish, and En
     const raidMenu = raidTest.raidLanguageRow('tr').toJSON().components[0];
     assert.deepEqual(announcementMenu.options.map(option => option.value), ['auto', 'tr', 'en']);
     assert.deepEqual(raidMenu.options.map(option => option.value), ['auto', 'tr', 'en']);
-    assert.equal(announcementMenu.placeholder, '🌐 Language');
-    assert.equal(raidMenu.placeholder, '🌐 Language');
-    assert.equal(announcementMenu.options[0].label, '🌐 Automatic (Discord language)');
-    assert.equal(raidMenu.options[0].label, '🌐 Automatic (Discord language)');
+    assert.equal(announcementMenu.placeholder, '🌐 Dil / Language');
+    assert.equal(raidMenu.placeholder, '🌐 Dil / Language');
+    assert.equal(announcementMenu.options[0].label, 'Otomatik / Automatic (Discord)');
+    assert.equal(raidMenu.options[0].label, 'Otomatik / Automatic (Discord)');
 });
 
 test('preview mass mentions are escaped and cannot ping', () => {
@@ -42,7 +42,7 @@ test('published announcement resolves raid timestamps and explicitly allows only
     const payload = buildPublishedMessagePayload(record, 'en', raid);
     assert.equal(
         payload.content,
-        '@here\n\nMaster Test <t:2000000000:F>\n\n-# To view the other language privately, use the language selector below.'
+        '@here\n\nMaster Test <t:2000000000:F>\n\n-# Use the language menu to save your preferred language and read this announcement in it.'
     );
     assert.deepEqual(payload.allowedMentions, { parse: ['everyone'] });
     assert.equal(payload.embeds, undefined);
@@ -66,7 +66,7 @@ test('announcement body cannot create an extra mass mention', () => {
     const payload = buildPublishedMessagePayload(record, 'en');
     assert.equal(
         payload.content,
-        '@here\n\n@\u200beveryone test\n\n-# To view the other language privately, use the language selector below.'
+        '@here\n\n@\u200beveryone test\n\n-# Use the language menu to save your preferred language and read this announcement in it.'
     );
 });
 

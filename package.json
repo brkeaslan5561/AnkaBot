@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test",
-    "check": "node --check index.js && node --check raid.js && node --check announcement.js && node --check localization.js && node --check translation_service.js && node --check storage.js && node --check raid_assignment.js && node --check raid_catalog.js && node --check raid_emojis.js && node --check raid_table.js && node --check scripts/migrate_localization.js && node scripts/check_locales.js",
+    "check": "node --check index.js && node --check raid.js && node --check announcement.js && node --check language_settings.js && node --check localization.js && node --check translation_service.js && node --check storage.js && node --check raid_assignment.js && node --check raid_catalog.js && node --check raid_emojis.js && node --check raid_table.js && node --check scripts/migrate_localization.js && node scripts/check_locales.js",
     "preview": "node scripts/generate_raid_preview.js",
     "migrate-localization": "node scripts/migrate_localization.js"
   },

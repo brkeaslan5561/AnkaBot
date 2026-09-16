@@ -9,6 +9,10 @@ const preferenceStore = new JsonStore(
     path.join(__dirname, 'user_language_preferences.json'),
     { version: 1, users: {} }
 );
+const channelLanguageStore = new JsonStore(
+    path.join(__dirname, 'channel_languages.json'),
+    { version: 1, channels: {} }
+);
 const bundleCache = new Map();
 let runtimeConfig = {};
 
@@ -35,6 +39,20 @@ function getGuildLanguage(guildId = null) {
     const guildLanguages = runtimeConfig.guildLanguages || {};
     const configured = guildId ? guildLanguages[String(guildId)] : null;
     return normalizeLanguage(configured || runtimeConfig.defaultLanguage || process.env.ANKABOT_DEFAULT_LANGUAGE || DEFAULT_LANGUAGE, DEFAULT_LANGUAGE);
+}
+
+function getSharedLanguage(guildId = null, channelId = null) {
+    const configured = channelLanguageStore.data.channels?.[String(channelId)]?.language
+        || runtimeConfig.channelLanguages?.[String(channelId)]
+        || runtimeConfig.guildLanguages?.[String(guildId)]
+        || runtimeConfig.defaultLanguage || process.env.ANKABOT_DEFAULT_LANGUAGE || 'en';
+    return ['tr', 'en', 'both'].includes(configured) ? configured : 'en';
+}
+
+function setChannelLanguage(guildId, channelId, language) {
+    if (!guildId || !channelId || !['tr', 'en', 'both'].includes(language)) throw new Error('Invalid channel language.');
+    channelLanguageStore.data.channels[String(channelId)] = { guildId: String(guildId), language };
+    channelLanguageStore.save();
 }
 
 function loadLocaleBundle(language) {
@@ -67,6 +85,11 @@ function interpolate(template, variables = {}) {
 }
 
 function t(language, key, variables = {}) {
+    if (language === 'both') {
+        const tr = t('tr', key, variables);
+        const en = t('en', key, variables);
+        return tr === en ? tr : `${tr} / ${en}`;
+    }
     const selected = normalizeLanguage(language);
     let value = lookup(loadLocaleBundle(selected), key);
     if (typeof value !== 'string' && selected !== DEFAULT_LANGUAGE) value = lookup(loadLocaleBundle(DEFAULT_LANGUAGE), key);
@@ -112,9 +135,10 @@ function rememberInteractionLocale(userId, locale) {
 }
 
 function resolveUserLanguage(context = {}, fallback = DEFAULT_LANGUAGE) {
+    if (SUPPORTED_LANGUAGES.has(context.language)) return context.language;
     const localeLanguage = languageFromLocale(context.locale);
     if (localeLanguage) return localeLanguage;
-    return normalizeLanguage(context.guildLanguage || fallback, DEFAULT_LANGUAGE);
+    return DEFAULT_LANGUAGE;
 }
 
 function languageForUser(userId, options = {}) {
@@ -183,6 +207,8 @@ module.exports = {
     languageFromLocale,
     configureLocalization,
     getGuildLanguage,
+    getSharedLanguage,
+    setChannelLanguage,
     loadLocaleBundle,
     interpolate,
     t,
@@ -195,5 +221,6 @@ module.exports = {
     formatDiscordTimestamp,
     raidTemplateVariables,
     resolveRaidTemplateText,
-    _preferenceStore: preferenceStore
+    _preferenceStore: preferenceStore,
+    _channelLanguageStore: channelLanguageStore
 };
