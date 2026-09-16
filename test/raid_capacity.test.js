@@ -172,7 +172,7 @@ test('raid kartı ve düğmeleri dil ayarından bağımsız Türkçe / English g
     const english = _test.raidEmbedOlustur(raid).toJSON();
     const turkish = _test.raidEmbedOlustur(raid, 'tr').toJSON();
     assert.match(english.title, /KAYIT \/ REGISTRATION/);
-    assert.match(english.description, /\*\*KATILIM \/ PLAYERS:\*\*/);
+    assert.match(english.description, /\*\*PLAYERS:\*\*/);
     assert.match(english.description, /\*\*TARİH \/ DATE:\*\*/);
     assert.equal(turkish.description, english.description);
     assert.deepEqual(_test.raidButtonRow(false, 'tr').toJSON(), _test.raidButtonRow(false, 'en').toJSON());
