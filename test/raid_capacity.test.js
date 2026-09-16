@@ -171,9 +171,9 @@ test('raid kartı ve düğmeleri dil ayarından bağımsız Türkçe / English g
     assert.equal(_test.raidLanguage(raid), 'en');
     const english = _test.raidEmbedOlustur(raid).toJSON();
     const turkish = _test.raidEmbedOlustur(raid, 'tr').toJSON();
-    assert.match(english.title, /Kayıt \/ Registration/);
-    assert.match(english.description, /\*\*Katılım \/ Players:\*\*/);
-    assert.match(english.description, /\*\*Tarih \/ Date:\*\*/);
+    assert.match(english.title, /KAYIT \/ REGISTRATION/);
+    assert.match(english.description, /\*\*KATILIM \/ PLAYERS:\*\*/);
+    assert.match(english.description, /\*\*TARİH \/ DATE:\*\*/);
     assert.equal(turkish.description, english.description);
     assert.deepEqual(_test.raidButtonRow(false, 'tr').toJSON(), _test.raidButtonRow(false, 'en').toJSON());
     assert.equal(require('../raid').buildRaidMessagePayload(raid).components.length, 1);

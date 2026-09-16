@@ -497,7 +497,7 @@ function isRaidClosed(raid) {
 }
 
 function listText(list, isReserve = false, language = 'tr') {
-    if (!Array.isArray(list) || list.length === 0) return 'Boş / Empty';
+    if (!Array.isArray(list) || list.length === 0) return 'BOŞ / EMPTY';
     return [...list]
         .sort((a, b) => (Number(a.sira) || 9999) - (Number(b.sira) || 9999))
         .map(player => {
@@ -513,34 +513,34 @@ function raidEmbedOlustur(raid, language = raidLanguage(raid)) {
     normalizeRaid(raid);
     const closed = isRaidClosed(raid);
     const color = closed ? '#E53935' : '#1D8BD1';
-    const title = closed ? '🔴 ASHES OF ANKA RAID · Kapandı / Closed' : 'ASHES OF ANKA RAID · Kayıt / Registration';
-    const typeLabel = raid.contentType === 'dungeon' ? 'Zindan / Dungeon' : 'Trial';
+    const title = closed ? '🔴 ASHES OF ANKA RAID · KAPANDI / CLOSED' : 'ASHES OF ANKA RAID · KAYIT / REGISTRATION';
+    const typeLabel = raid.contentType === 'dungeon' ? 'ZİNDAN / DUNGEON' : 'TRIAL';
     const joined = mainCount(raid);
     const linkedTitle = `[${String(raid.zindan || raid.zindanKodu || 'RAID').toUpperCase()}](https://discord.com)`;
-    const statusLine = closed ? '\n\n**Etkinlik sona erdi, kayıt kapalı. / This event has ended; registration is closed.**' : '';
+    const statusLine = closed ? '\n\n**ETKİNLİK SONA ERDİ, KAYIT KAPALI. / THIS EVENT HAS ENDED; REGISTRATION IS CLOSED.**' : '';
     // Preserve descriptions saved by the previous bilingual-description version.
-    const description = raid.aciklama || [raid.descriptions?.tr, raid.descriptions?.en].filter(Boolean).join('\n') || 'Açıklama yok / No description';
+    const description = raid.aciklama || [raid.descriptions?.tr, raid.descriptions?.en].filter(Boolean).join('\n') || 'AÇIKLAMA YOK / NO DESCRIPTION';
 
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
-        .setDescription(`## ${linkedTitle}\n\n**Tür / Type:** ${typeLabel}\n**Katılım / Players:** ${joined}/${raid.capacity} • **Yedek / Reserve:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **Tarih / Date:**\n ${raid.tarih}\n\n<:zaciklama:1527641028171923537> **Açıklama / Description:**\n ${description}${statusLine}`)
+        .setDescription(`## ${linkedTitle}\n\n**TÜR / TYPE:** ${typeLabel}\n**KATILIM / PLAYERS:** ${joined}/${raid.capacity} • **YEDEK / RESERVE:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **TARİH / DATE:**\n ${raid.tarih}\n\n<:zaciklama:1527641028171923537> **AÇIKLAMA / DESCRIPTION:**\n ${description}${statusLine}`)
         .addFields(
             { name: `<:ztank:1527640905073295440> ${roleLabel(language, 'tank')} (${raid.tanklar.length})`, value: listText(raid.tanklar, false, language), inline: true },
             { name: `<:zhealer:1527640985520312440> ${roleLabel(language, 'heal')} (${raid.healerlar.length})`, value: listText(raid.healerlar, false, language), inline: true },
             { name: `<:zdps:1527640943191265310> ${roleLabel(language, 'dps')} (${raid.dpsler.length})`, value: listText(raid.dpsler, false, language), inline: true },
-            { name: `<:zyedek:1527640786185879573> Yedek / Reserve (${raid.yedekler.length})`, value: listText(raid.yedekler, true, language), inline: true }
+            { name: `<:zyedek:1527640786185879573> YEDEK / RESERVE (${raid.yedekler.length})`, value: listText(raid.yedekler, true, language), inline: true }
         )
         .setTimestamp()
-        .setFooter({ text: `Ashes of Anka • ${joined}/${raid.capacity}` });
+        .setFooter({ text: `ASHES OF ANKA • ${joined}/${raid.capacity}` });
 }
 
 function raidButtonRow(disabled = false, language = 'tr') {
     const tank = new ButtonBuilder().setCustomId('raid_join_tank').setLabel('TANK').setEmoji('<:ztank:1527640905073295440>').setStyle(ButtonStyle.Primary).setDisabled(disabled);
     const healer = new ButtonBuilder().setCustomId('raid_join_heal').setLabel('HEALER').setEmoji('<:zhealer:1527640985520312440>').setStyle(ButtonStyle.Success).setDisabled(disabled);
     const dps = new ButtonBuilder().setCustomId('raid_join_dps').setLabel('DPS').setEmoji('<:zdps:1527640943191265310>').setStyle(ButtonStyle.Danger).setDisabled(disabled);
-    const reserve = new ButtonBuilder().setCustomId('raid_join_yedek').setLabel('Yedek / Reserve').setEmoji('<:zyedek:1527640786185879573>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
-    const leave = new ButtonBuilder().setCustomId('raid_leave').setLabel('Ayrıl / Leave').setEmoji('<:zcikis:1527641065614741684>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
+    const reserve = new ButtonBuilder().setCustomId('raid_join_yedek').setLabel('YEDEK / RESERVE').setEmoji('<:zyedek:1527640786185879573>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
+    const leave = new ButtonBuilder().setCustomId('raid_leave').setLabel('AYRIL / LEAVE').setEmoji('<:zcikis:1527641065614741684>').setStyle(ButtonStyle.Secondary).setDisabled(disabled);
     return new ActionRowBuilder().addComponents(tank, healer, dps, reserve, leave);
 }
 
@@ -1502,7 +1502,7 @@ async function raidDuzenleKomutuYonet(interaction) {
         raid.attendanceDraftAbsentIds = [];
         raid.attendanceResult = null;
     }
-    if (newDescription !== null) raid.aciklama = newDescription.trim() || 'Açıklama yok / No description';
+    if (newDescription !== null) raid.aciklama = newDescription.trim() || 'AÇIKLAMA YOK / NO DESCRIPTION';
     saveRaid(messageId, raid);
     await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
     return interaction.editReply(t(language, 'raid.edit.success', { raidName: raid.zindan }));
@@ -1624,7 +1624,7 @@ async function handleRaidCreation(interaction) {
         const session = raidKurulumHafizasi.get(interaction.user.id);
         const language = interactionLanguage(interaction);
         if (!session) return interaction.editReply({ content: t(language, 'common.expired'), components: [] });
-        const description = interaction.fields.getTextInputValue('raid_description') || 'Açıklama yok / No description';
+        const description = interaction.fields.getTextInputValue('raid_description') || 'AÇIKLAMA YOK / NO DESCRIPTION';
         const created = istanbulZamaniOlustur(session.gun, session.ay, session.saat, null, true);
         const checked = istanbulParcalariAl(created.timestamp);
         if (checked.gun !== Number(session.gun) || checked.ay !== Number(session.ay) || checked.saat !== session.saat) {
