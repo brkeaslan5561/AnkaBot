@@ -1091,12 +1091,12 @@ async function sendRegistrationReminder(client, messageId, raid, user, role, isR
     const userId = String(user.id);
     if (raid.registrationReminderSentUsers.includes(userId)) return false;
     try {
-        const language = languageForUser(userId, { guildId: raid.guildId });
-        await user.send(t(language, 'raid.registration.dm', {
+        const versions = ['tr', 'en'].map(language => t(language, 'raid.registration.dm', {
             raidName: raid.zindan,
             raidDate: raid.tarih,
             role: isReserve ? roleLabel(language, 'yedek') : roleLabel(language, role)
         }));
+        await user.send(`${versions[0]}\n\n**For English speakers:**\n${versions[1]}`);
         raid.registrationReminderSentUsers.push(userId);
         raid.registrationReminderSentUsers = raid.registrationReminderSentUsers.slice(-100);
         saveRaid(messageId, raid);
