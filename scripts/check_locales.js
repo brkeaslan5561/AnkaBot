@@ -6,7 +6,7 @@ const bundles = Object.fromEntries(['en', 'tr'].map(language => [
     language,
     JSON.parse(fs.readFileSync(path.join(root, 'locales', `${language}.json`), 'utf8'))
 ]));
-const files = ['raid.js', 'announcement.js', 'raid_assignment.js', 'raid_table.js', 'language_settings.js'];
+const files = ['raid.js', 'announcement.js', 'raid_assignment.js', 'raid_table.js'];
 const referenced = new Set();
 const keyPattern = /\bt\(\s*[^,]+,\s*['"]([^'"]+)['"]/g;
 

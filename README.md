@@ -113,19 +113,15 @@ Bu iki dosyanın düzenli yedeğini alın. Zamanlanmış T−30/T−15/T−5/ba�
 
 ## Türkçe / English yerelleştirme
 
-AnkaBot kişisel dil tercihlerini ve son bilinen Discord dillerini `user_language_preferences.json` içinde saklar. Katılım, ekipman seçimi, hata mesajları ve kişisel bildirimlerin dili şu sırayla belirlenir:
+AnkaBot son bilinen Discord dillerini `user_language_preferences.json` içinde saklar. Etkileşim dili şu sırayla belirlenir:
 
-1. Kullanıcının kaydettiği Türkçe veya English tercihi
-2. Tercih **Otomatik** ise güncel Discord dili; etkileşim dışında son bilinen Discord dili (`tr` / `tr-TR` Türkçe, diğer diller İngilizce)
-3. Dil bilgisi yoksa İngilizce
+1. Kullanıcının güncel Discord etkileşim dili (`tr` / `tr-TR` Türkçe, diğer bütün diller İngilizce)
+2. Discord dili bulunamazsa son bilinen Discord dili
+3. Hiç dil bilgisi yoksa İngilizce
 
-`/dil` (`/language`) komutundan veya raid/duyuru dil menüsünden **Otomatik / Türkçe / English** seçilebilir. Menü seçimi tercihi kalıcı kaydeder ve ilgili içeriği yalnızca kullanıcıya gösterir. Diğer oyuncuların dili ve ortak kart değişmez; herkes aynı kadroya kaydolur.
+Paylaşılan raid kartındaki sabit yazılar herkese doğrudan **Kayıt / Registration**, **Katılım / Players**, **Tarih / Date**, **Yedek / Reserve** şeklinde gösterilir. Kartta dil menüsü veya ek dil ayarı yoktur. Açıklama, oluşturulurken yazıldığı şekilde gösterilir.
 
-**Sunucuyu Yönet** yetkisine sahip yöneticiler `/kanal-dili` (`/channel-language`) ile bulundukları kanal için **Türkçe / English / Türkçe + English** seçer. Karma kanal için `Türkçe / English` seçeneğini kullanın. Ortak kartlar ve yeni PNG tabloları bu ayarı kullanır; kartı oluşturan kişinin dili belirleyici değildir. Ayar `channel_languages.json` içinde saklanır ve yeniden başlatmada korunur. Dil menüsü iki dilde anlaşılır şekilde gösterilir.
-
-Kanal ayarı yeni paylaşımlara ve sonraki kart güncellemelerine uygulanır. Eski açık kartları hemen yenilemek için aşağıdaki yerelleştirme betiği kullanılabilir. Önceden yayımlanmış duyuru ve PNG dosyaları otomatik yeniden paylaşılmaz.
-
-Raid oluştururken Türkçe ve İngilizce açıklama alanları ayrı doldurulur. Eksik çeviri varsa ilgili dilde açıkça belirtilir; hiçbir açıklama girilmemişse iki dilde standart boş açıklama kullanılır. `/düzenle` komutunun `aciklama-tr` ve `aciklama-en` seçenekleri iki sürümü ayrı günceller; `aciklama` kişisel bot dilindeki sürümü değiştirir. Eski raidlerin tek açıklama metni okunmaya devam eder.
+Duyurular mevcut dil akışını kullanır: oluşturanın Discord dilinde paylaşılır; duyuru dil menüsü diğer sürümü yalnızca seçen kişiye gösterir. Kişisel katılım ekranları Discord dilini izlemeye devam eder.
 
 `config.json` için önerilen ek ayarlar:
 
@@ -134,17 +130,11 @@ Raid oluştururken Türkçe ve İngilizce açıklama alanları ayrı doldurulur.
   "defaultLanguage": "en",
   "guildLanguages": {
     "SUNUCU_ID": "en"
-  },
-  "channelLanguages": {
-    "KARMA_KANAL_ID": "both",
-    "TURKCE_KANAL_ID": "tr"
   }
 }
 ```
 
-Ortak mesaj dili önceliği: `/kanal-dili` ile kaydedilen ayar → `channelLanguages` → `guildLanguages` → `defaultLanguage` → İngilizce. Ortak mesaj ayarları `tr`, `en`, `both` kabul eder. Bunlar kişisel dil tercihini etkilemez.
-
-Çift dilli PNG örneği üretmek için `npm run preview -- Anka_Raid_Plan_Bilingual.png both` kullanın. Görselde sütun başlıkları iki satırda gösterilir; sabit görseldeki saat Türkiye saatidir ve `UTC+3` etiketi taşır. Discord kartlarında saat, Discord zaman damgasıyla gösterilir.
+`guildLanguages` isteğe bağlıdır. `defaultLanguage` verilmezse İngilizce kullanılır. Bu ayarlar yalnızca Discord dil bilgisi bulunmayan eski kayıtlar için yedektir.
 
 ## Raid duyurusu
 
@@ -152,13 +142,13 @@ Yönetim yetkisine sahip bir görevli `/announcement` komutunu kullanır. Türk�
 
 Akış:
 
-1. `/duyuru hazir:True` (`/announcement template:True`) ile hazır iki dilli şablon kullanın veya komutu normal açıp kişisel bot dilinizde metin yazın. `{{raid_name}}`, `{{raid_date}}`, `{{raid_time}}` ve `{{raid_relative}}` yer tutucularını kullanabilirsiniz.
+1. Türkçe metni yazın. `{{raid_name}}`, `{{raid_date}}`, `{{raid_time}}` ve `{{raid_relative}}` yer tutucularını kullanabilirsiniz.
 2. Raid seçin; iki dilin tamamını ephemeral önizlemede kontrol edin.
-3. Türkçe ve İngilizce metinlerin ikisini de tamamlayın; gerekirse düzenleyin ve standart satırları ekleyin. Türkçe metni düzenlemek mevcut İngilizce metni otomatik ezmez; diğer sürümü de kontrol edin.
+3. Gerekirse Türkçe veya İngilizce metni düzenleyin ve isteğe bağlı standart satırları ekleyin.
 4. `@here`, `@everyone` veya bildirimsiz yayını seçin.
 5. **Yayınla** düğmesinden sonra gelen son onayı verin.
 
-Önizlemeler toplu bildirim göndermez. Duyuru kanalın dilinde paylaşılır; karma kanalda iki metin aynı mesajda gösterilir. İki dilli içerik 2000 karakteri aşarsa aynı mesajda iki embed kullanılır, böylece yalnızca bir toplu bildirim gider. Discord sınırlarını aşan içerik yayımlanmadan geri bildirilir. Toplu bildirim seçilmişse hem görevlinin hem de botun `Mention Everyone` izni doğrulanır. Normal kullanıcılar dil menüsüyle tercihlerini kaydedip seçtikleri sürümü özel olarak okuyabilir.
+Önizlemeler toplu bildirim göndermez. Yayınlanan duyuru embed yerine doğrudan düz Discord mesajı olarak paylaşılır. Yayın sırasında toplu bildirim seçilmişse hem görevlinin hem de botun `Mention Everyone` izni doğrulanır. Normal kullanıcılar duyuru oluşturamaz fakat yayınlanan duyurunun dil menüsünü kullanarak tam Türkçe veya İngilizce metni özel yanıt olarak görebilir.
 
 ### Ücretsiz / yerel çeviri
 
@@ -172,7 +162,7 @@ ANKABOT_LOCAL_TRANSLATION_MODEL=KURULU_YEREL_MODEL
 ANKABOT_TRANSLATION_TIMEOUT_MS=30000
 ```
 
-Yerel model yapılandırılmamışsa çeviri isteği gönderilmez; görevli iki metni elle tamamlar veya hazır şablonu kullanır. Yapılandırılmış yerel model, İngilizce sürümü henüz bulunmayan Türkçe taslağı çevirebilir. Hazır şablon ve standart öneriler model gerektirmez.
+Yerel model yapılandırılmamışsa Türkçe taslak kaybolmaz; arayüz durumu bildirir ve görevli İngilizce metni elle girer. Hazır akıllı öneriler her iki dilde yerleşik olduğundan model gerektirmez.
 
 ## Eski raid kartlarını güncelleme
 
@@ -194,8 +184,7 @@ Yeni komutlar bot başlatılırken mevcut global komut kayıt sistemiyle otomati
 
 ## Yeni çalışma verileri
 
-- `user_language_preferences.json`: Kalıcı kişisel dil tercihleri ve son bilinen Discord dili
-- `channel_languages.json`: Yöneticilerin kaydettiği ortak kanal dili
+- `user_language_preferences.json`: Kullanıcıların son bilinen Discord dili
 - `announcements.json`: Taslak ve yayınlanmış duyuruların Türkçe/İngilizce metinleri ile raid/mesaj bağlantıları
 
 Bu dosyalar Git tarafından izlenmez ve ilk kullanımda güvenli şekilde oluşturulur. Şema dönüşümü veya ayrı bir veritabanı kurulumu gerekmez.

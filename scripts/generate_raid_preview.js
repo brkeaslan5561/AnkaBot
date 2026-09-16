@@ -71,10 +71,8 @@ const players = [
 async function main() {
     const requestedPath = process.argv[2] || path.join(__dirname, '..', 'Anka_Raid_Plan_Ornek.png');
     const outputPath = path.resolve(requestedPath);
-    const language = process.argv[3] || 'tr';
-    if (!['tr', 'en', 'both'].includes(language)) throw new Error('Language must be tr, en, or both.');
-    const plan = assignRaid(raid, players, null, language);
-    const png = await renderRaidTable(raid, plan, { language });
+    const plan = assignRaid(raid, players);
+    const png = await renderRaidTable(raid, plan, { status: 'LİDER ONAYLI' });
     fs.writeFileSync(outputPath, png);
     console.log(outputPath);
 }
@@ -83,3 +81,4 @@ main().catch(error => {
     console.error(error);
     process.exitCode = 1;
 });
+

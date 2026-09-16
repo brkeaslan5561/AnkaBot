@@ -15,11 +15,10 @@ test('Turkish locale detection works', () => {
   assert.equal(isTurkishLocale('en-US'), false);
 });
 
-test('saved personal preference overrides Discord locale', () => {
-  assert.equal(resolveUserLanguage({ language: 'tr', locale: 'en-US' }), 'tr');
-  assert.equal(resolveUserLanguage({ language: 'en', locale: 'tr-TR' }), 'en');
-  assert.equal(resolveUserLanguage({ language: 'auto', locale: 'tr-TR' }), 'tr');
-  assert.equal(resolveUserLanguage({ language: 'auto', guildLanguage: 'tr' }), 'en');
+test('current Discord locale overrides a stale manual language value', () => {
+  const result = resolveUserLanguage({ userId: '1', locale: 'en-US', manual: 'tr' }, 'en');
+  assert.equal(result, 'en');
+  assert.equal(resolveUserLanguage({ userId: '1', locale: 'tr-TR', manual: 'en' }, 'en'), 'tr');
 });
 
 test('automatic language follows Turkish Discord locale and otherwise uses English', () => {

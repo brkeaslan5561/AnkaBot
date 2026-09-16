@@ -12,7 +12,7 @@
   "language.automatic": "🌐 Automatic (Discord language)",
   "language.turkish": "🇹🇷 Türkçe",
   "language.english": "🇬🇧 English",
-  "language.saved": "✅ Your language preference is now **{{language}}**. Future personal interactions will use this preference.",
+  "language.saved": "✅ Showing **{{language}}** privately.",
   "language.auto_name": "Automatic (Discord language)",
   "language.raid_details": "## {{raidName}}\n**Type:** {{type}}\n**Attendance:** {{joined}}/{{capacity}} · **Reserves:** {{reserves}}\n\n📅 {{raidDate}}\n⏳ {{raidRelative}}\n\n**Description:**\n{{description}}",
   "raid.type.dungeon": "DUNGEON",
@@ -52,7 +52,7 @@
   "raid.creation.month": "Choose Month",
   "raid.creation.selected_month": "Selected Month: {{month}}",
   "raid.creation.choose_time": "{{day}} {{month}} selected. Choose the time.",
-  "raid.creation.time_placeholder": "Choose time (Turkey, UTC+3)",
+  "raid.creation.time_placeholder": "Choose time",
   "raid.creation.description_title": "Raid Description",
   "raid.creation.description_label": "Description / Officer Note",
   "raid.creation.no_description": "No description was provided.",
@@ -241,12 +241,8 @@
   "announcement.published": "✅ Announcement published: {{url}}",
   "announcement.not_found": "❌ Announcement or draft was not found.",
   "announcement.version_title": "📢 {{raidName}}",
-  "announcement.version_footer": "Use the language menu to save your preferred language and read this announcement in it.",
+  "announcement.version_footer": "To view the other language privately, use the language selector below.",
   "announcement.suggestion.early": "Please be online 15 minutes before the raid.",
   "announcement.suggestion.mechanics": "Please watch the mechanics guide before joining.",
-  "announcement.suggestion.requirements": "Please complete your missing requirements before the raid starts.",
-  "language.channel_saved": "✅ Channel language saved as **{{language}}**. New posts and refreshed raid cards will use it. Previously published announcements and PNG files stay as published.",
-  "raid.description.missing": "No description has been added in this language. Use the language menu to view the other version.",
-  "announcement.both_required": "Fill in both Turkish and English before publishing. For a ready-made announcement, use /announcement template:True.",
-  "announcement.template": "Registration is open for **{{raid_name}}**!\n📅 {{raid_date}} · {{raid_relative}}\nSelect your role on the raid card to join. Please be ready 10 minutes before the start."
+  "announcement.suggestion.requirements": "Please complete your missing requirements before the raid starts."
 }

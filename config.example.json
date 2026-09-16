@@ -3,6 +3,5 @@
   "clientId": "DISCORD_APPLICATION_ID",
   "logChannelId": "RAPOR_LOG_KANAL_ID",
   "defaultLanguage": "en",
-  "guildLanguages": {},
-  "channelLanguages": {}
+  "guildLanguages": {}
 }

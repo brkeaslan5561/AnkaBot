@@ -6,7 +6,6 @@ const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu,
 const { syncCatalogEmojis } = require('./raid_emojis.js');
 const { announcementCommand, handleAnnouncementInteraction } = require('./announcement.js');
 const { configureLocalization, rememberInteractionLocale } = require('./localization.js');
-const { languageCommand, channelLanguageCommand, handleLanguageCommand } = require('./language_settings');
 
 configureLocalization(config);
 
@@ -44,9 +43,7 @@ const commands = [
     raidKomutu,
     raidOyuncuEkleKomutu,
     raidDuzenleKomutu,
-    announcementCommand,
-    languageCommand,
-    channelLanguageCommand
+    announcementCommand
 ].map(command => command.toJSON());
 
 const userSessions = new Map();
@@ -104,9 +101,6 @@ client.on('messageDeleteBulk', messages => {
 // ANA ETKİLEŞİM DİNLEYİCİSİ
 client.on('interactionCreate', async interaction => {
     if (interaction.user?.id && interaction.locale) rememberInteractionLocale(interaction.user.id, interaction.locale);
-    if (interaction.isChatInputCommand() && ['language', 'channel-language'].includes(interaction.commandName)) {
-        return await handleLanguageCommand(interaction);
-    }
 
     if (interaction.isAutocomplete() && interaction.commandName === 'announcement') {
         return await handleAnnouncementInteraction(interaction);

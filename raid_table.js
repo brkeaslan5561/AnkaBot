@@ -80,7 +80,7 @@ function formatRaidDate(raid, language = 'tr') {
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-    }).format(new Date(Number(raid.unixZamani) * 1000)).replace(',', ' ·') + ' (UTC+3)';
+    }).format(new Date(Number(raid.unixZamani) * 1000)).replace(',', ' ·');
 }
 
 function fallbackIcon(x, y, label, color = '#7D8794') {
@@ -201,11 +201,11 @@ async function renderRaidTable(raid, plan, options = {}) {
         <g transform="translate(1780 83)">
             <rect width="340" height="58" rx="16" fill="#141920" stroke="#29313B" stroke-width="2"/>
             <circle cx="26" cy="29" r="6" fill="#D8864D"/>
-            <text x="48" y="37" fill="#C9D0D9" font-size="${language === 'both' ? 16 : 22}" font-weight="600">${escapeXml(status)}</text>
+            <text x="48" y="37" fill="#C9D0D9" font-size="22" font-weight="600">${escapeXml(status)}</text>
         </g>
         <g transform="translate(2140 83)">
             <rect width="330" height="58" rx="16" fill="#141920" stroke="#29313B" stroke-width="2"/>
-            <text x="22" y="24" fill="#7F8996" font-size="${language === 'both' ? 12 : 16}" font-weight="700">${escapeXml(t(language, 'raid.table.attendance'))}</text>
+            <text x="22" y="24" fill="#7F8996" font-size="16" font-weight="700" letter-spacing="1.4">${escapeXml(t(language, 'raid.table.attendance'))}</text>
             <text x="22" y="48" fill="#EDF0F4" font-size="27" font-weight="700">${rows.length} / ${capacity}</text>
             <text x="302" y="37" fill="#B97850" text-anchor="end" font-size="19" font-weight="700">${emptySlots} ${escapeXml(t(language, 'raid.table.empty'))}</text>
         </g>
@@ -216,10 +216,7 @@ async function renderRaidTable(raid, plan, options = {}) {
     `;
 
     for (let index = 0; index < columnLabels.length; index += 1) {
-        const lines = language === 'both' ? columnLabels[index].split(' / ') : [columnLabels[index]];
-        for (let line = 0; line < lines.length; line += 1) {
-            svg += `<text x="${columnX[index] + COLUMN_WIDTHS[index] / 2}" y="${TABLE_Y + (lines.length > 1 ? 32 + line * 27 : 51)}" class="th" text-anchor="middle">${escapeXml(lines[line])}</text>`;
-        }
+        svg += `<text x="${columnX[index] + COLUMN_WIDTHS[index] / 2}" y="${TABLE_Y + 51}" class="th" text-anchor="middle">${escapeXml(columnLabels[index])}</text>`;
     }
 
     for (let index = 0; index < capacity; index += 1) {
