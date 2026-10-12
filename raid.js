@@ -18,7 +18,7 @@ const { assignRaid, inventoryOf } = require('./raid_assignment');
 const { renderRaidTable } = require('./raid_table');
 const { createLeaderReview } = require('./raid_leader');
 const { createRaidCreation } = require('./raid_creation');
-const { createTimePreferences, organizerTime, resolveRaidTimeEdit } = require('./raid_time');
+const { createTimePreferences, resolveRaidTimeEdit } = require('./raid_time');
 const { sendEmojiSafe, emojiSafeInteraction } = require('./raid_emojis');
 const {
     t,
@@ -492,8 +492,9 @@ function raidEmbedOlustur(raid, language = raidLanguage(raid)) {
     const description = String(raid.aciklama ?? [raid.descriptions?.tr, raid.descriptions?.en].filter(Boolean).join('\n'))
         .split('\n').filter(line => !emptyDescriptions.has(line.trim())).join('\n').trim();
     const descriptionLine = description ? `\n\n<:zaciklama:1527641028171923537> **AÇIKLAMA / DESCRIPTION:**\n ${description}` : '';
-    const organizer = organizerTime(raid);
-    const timeLine = organizer ? `**Raid Liderinin Saati** / *Organizer Time*\n${organizer}\n\n**Yerel Saatiniz** / *Your Local Time*\n${discordTarihMetniOlustur(raid.unixZamani)}` : raid.tarih;
+    const timestamp = Number(raid.unixZamani);
+    const timeLine = timestamp > 0 && Number.isFinite(new Date(timestamp * 1000).getTime())
+        ? discordTarihMetniOlustur(timestamp) : raid.tarih || '—';
 
     return new EmbedBuilder()
         .setColor(color)
@@ -931,32 +932,91 @@ function attendanceRosterSnapshot(raid) {
         }));
 }
 
-function attendancePromptComponents(messageId, roster, language = 'tr') {
+const attendanceInProgress = new Set();
+const attendanceText = key => `${t('tr', `raid.attendance.ui.${key}`)} / ${t('en', `raid.attendance.ui.${key}`)}`;
+const attendanceLines = key => `**${t('tr', `raid.attendance.ui.${key}`)}**\n*${t('en', `raid.attendance.ui.${key}`)}*`;
+
+function buildAttendanceEmbed(client, raid, roster, { selected = false, page = 0 } = {}) {
+    const completed = raid.attendanceCompleted;
+    const timestamp = Number(raid.unixZamani);
+    const date = timestamp > 0 && Number.isFinite(new Date(timestamp * 1000).getTime())
+        ? formatDiscordTimestamp(timestamp, 'F') : '—';
+    const name = String(raid.zindan || raid.zindanKodu || 'Raid').slice(0, 256).replace(/^(.+?)\s+\((.+)\)$/, '$1 – $2');
+    const embed = new EmbedBuilder().setColor('#5865F2')
+        .setTitle(attendanceText(completed ? 'completed' : 'title'))
+        .setDescription(`**${name}**\n\n${attendanceLines(completed ? 'recorded' : selected ? 'review' : 'intro')}`)
+        .addFields(
+            { name: attendanceText('time'), value: date },
+            { name: attendanceText('roster'), value: String(roster.length), inline: true }
+        );
+    const avatar = client.user?.displayAvatarURL?.({ extension: 'png', size: 64 });
+    embed.setAuthor({ name: 'Anka Bot', ...(avatar ? { iconURL: avatar } : {}) });
+    if (completed) {
+        const result = raid.attendanceResult || {};
+        embed.addFields(
+            { name: attendanceText('present'), value: String(result.presentUserIds?.length || 0), inline: true },
+            { name: attendanceText('absent'), value: String(result.absentUserIds?.length || 0), inline: true }
+        );
+    } else {
+        const absentIds = new Set(raid.attendanceDraftAbsentIds || []);
+        const absent = roster.filter(player => absentIds.has(String(player.userId)));
+        const playerLines = absent.map(player => `• ${player.mention || `<@${player.userId}>`} — ${String(player.displayName || player.userId).slice(0, 100)}`);
+        // Keep the confirmation list inside one field, including on large legacy rosters.
+        let list = '';
+        let shown = 0;
+        for (const line of playerLines) {
+            if (list.length + line.length + 1 > 800) break;
+            list += `${list ? '\n' : ''}${line}`;
+            shown++;
+        }
+        if (shown < absent.length) list += `\n${t('tr', 'raid.attendance.ui.more', { count: absent.length - shown })}\n*${t('en', 'raid.attendance.ui.more', { count: absent.length - shown })}*`;
+        embed.addFields(
+            { name: `${attendanceText('absent')}${absent.length ? ` · ${absent.length}` : ''}`, value: selected ? list || attendanceLines('none') : attendanceLines('select') },
+            { name: '\u200b', value: attendanceLines('notice') }
+        );
+        if (roster.length > 25) embed.setFooter({ text: `${attendanceText('page')} ${page + 1}/${Math.ceil(roster.length / 25)}` });
+    }
+    return embed;
+}
+
+function attendancePromptComponents(messageId, roster, language = 'tr', page = 0, absentIds = []) {
     if (!roster.length) return [];
+    const pageCount = Math.ceil(roster.length / 25);
+    page = Math.min(Math.max(0, page), pageCount - 1);
+    const visible = roster.slice(page * 25, (page + 1) * 25);
     const menu = new StringSelectMenuBuilder()
-        .setCustomId(`raid_attendance_absent_${messageId}`)
-        .setPlaceholder(t(language, 'raid.attendance.absent_placeholder'))
-        .setMinValues(1)
-        .setMaxValues(Math.min(25, roster.length))
-        .addOptions(roster.slice(0, 25).map(player => ({
+        .setCustomId(`raid_attendance_absent_${messageId}${page ? `_${page}` : ''}`)
+        .setPlaceholder(t('en', 'raid.attendance.ui.select_placeholder'))
+        .setMinValues(pageCount > 1 ? 0 : 1)
+        .setMaxValues(visible.length)
+        .addOptions(visible.map(player => ({
             label: String(player.displayName || player.userId).substring(0, 100),
             value: String(player.userId),
-            description: `${player.role === 'heal' ? 'HEALER' : String(player.role || '').toUpperCase()}${player.klas ? ` • ${player.klas}` : ''}`.substring(0, 100)
+            default: absentIds.includes(String(player.userId)),
+            description: `${player.role === 'heal' ? 'HEALER' : String(player.role || '—').toUpperCase()}${player.klas ? ` • ${player.klas}` : ''}`.substring(0, 100)
         })));
     const allPresent = new ButtonBuilder()
         .setCustomId(`raid_attendance_all_${messageId}`)
-        .setLabel(t(language, 'raid.attendance.everyone'))
+        .setLabel(t('en', 'raid.attendance.ui.all_present'))
         .setStyle(ButtonStyle.Success);
-    return [
+    const components = [
         new ActionRowBuilder().addComponents(menu),
         new ActionRowBuilder().addComponents(allPresent)
     ];
+    if (pageCount > 1) {
+        components[1].addComponents(
+            new ButtonBuilder().setCustomId(`raid_attendance_page_${messageId}_${Math.max(0, page - 1)}`).setLabel(t('en', 'raid.attendance.ui.previous')).setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+            new ButtonBuilder().setCustomId(`raid_attendance_page_${messageId}_${Math.min(pageCount - 1, page + 1)}`).setLabel(t('en', 'raid.attendance.ui.next')).setStyle(ButtonStyle.Secondary).setDisabled(page === pageCount - 1)
+        );
+        if (absentIds.length) components.push(attendanceConfirmRow(messageId));
+    }
+    return components;
 }
 
 function attendanceConfirmRow(messageId, language = 'tr') {
     return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`raid_attendance_confirm_${messageId}`).setLabel(t(language, 'raid.attendance.confirm')).setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(`raid_attendance_reset_${messageId}`).setLabel(t(language, 'raid.attendance.reset')).setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`raid_attendance_confirm_${messageId}`).setLabel(attendanceText('confirm')).setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`raid_attendance_reset_${messageId}`).setLabel(attendanceText('reset')).setStyle(ButtonStyle.Secondary)
     );
 }
 
@@ -974,25 +1034,21 @@ async function sendAttendancePrompt(client, messageId, raid) {
         return true;
     }
 
-    const leaderLanguage = languageForUser(raid.creatorId, { guildId: raid.guildId });
-    const content = `${t(leaderLanguage, 'raid.attendance.title', { raidName: raid.zindan })}\n${raid.tarih}\n\n${t(leaderLanguage, 'raid.attendance.prompt', { count: roster.length })}`;
-    const payload = { content, components: attendancePromptComponents(messageId, roster, leaderLanguage) };
     let sent = false;
     try {
         if (!raid.creatorId) throw new Error('Raid lideri bilinmiyor.');
         const leader = await client.users.fetch(raid.creatorId);
-        await leader.send(payload);
+        await leader.send({ embeds: [buildAttendanceEmbed(client, raid, roster)], components: attendancePromptComponents(messageId, roster) });
         sent = true;
     } catch (error) {
         console.warn(`Attendance DM failed (${messageId}); falling back to channel:`, error.message);
         try {
             const channel = await client.channels.fetch(raid.channelId);
             if (channel?.send) {
-                const sharedLanguage = raidLanguage(raid);
-                const sharedContent = `${t(sharedLanguage, 'raid.attendance.title', { raidName: raid.zindan })}\n${raid.tarih}\n\n${t(sharedLanguage, 'raid.attendance.prompt', { count: roster.length })}`;
                 await channel.send({
-                    content: `${raid.creatorMention || `<@${raid.creatorId}>`}\n${sharedContent}`,
-                    components: attendancePromptComponents(messageId, roster, sharedLanguage),
+                    content: raid.creatorMention || (raid.creatorId ? `<@${raid.creatorId}>` : undefined),
+                    embeds: [buildAttendanceEmbed(client, raid, roster)],
+                    components: attendancePromptComponents(messageId, roster),
                     allowedMentions: raid.creatorId ? { users: [String(raid.creatorId)] } : undefined
                 });
                 sent = true;
@@ -1108,8 +1164,6 @@ function buildRaidNotificationEmbed(client, raid, player, variant = 'signup') {
             { name: '\u200b', value: '⚠️ **15 dakika önce hazır olun.**\n*Please be ready 15 minutes early.*\n\n⚠️ **Katılmayan oyuncular yoklamada işaretlenebilir.**\n*No-shows may be marked absent.*' }
         );
     }
-    const organizer = organizerTime(raid);
-    if (organizer) embed.addFields({ name: '\u200b', value: `**Raid Liderinin Saati** / *Organizer Time*\n${organizer}` });
     const avatar = client.user?.displayAvatarURL?.({ extension: 'png', size: 128, forceStatic: true });
     return embed.setFooter({ text: 'AnkaBot • Raid Notification', ...(avatar ? { iconURL: avatar } : {}) });
 }
@@ -1778,50 +1832,53 @@ async function handleAttendanceInteraction(interaction) {
     if (!raid || !leaderOwnsRaid(interaction, raid)) {
         return privateReply(interaction, { content: t(language, 'raid.attendance.leader_only') });
     }
-    if (raid.attendanceCompleted) {
-        return interaction.update({ content: t(language, 'raid.attendance.completed_before'), components: [] });
-    }
-
     const roster = Array.isArray(raid.attendanceRoster) && raid.attendanceRoster.length
         ? raid.attendanceRoster
         : attendanceRosterSnapshot(raid);
+    if (attendanceInProgress.has(messageId)) return privateReply(interaction, { content: attendanceLines('busy') });
+    if (raid.attendanceCompleted) {
+        return interaction.update({ content: '', embeds: [buildAttendanceEmbed(interaction.client, raid, roster)], components: [] });
+    }
+    const page = Number(parts[4] || 0);
+    if (['absent', 'page'].includes(action) && (!Number.isInteger(page) || page < 0 || page >= Math.ceil(roster.length / 25))) return null;
 
     if (isAttendanceSelect && action === 'absent') {
-        raid.attendanceDraftAbsentIds = interaction.values.map(String);
+        const visibleIds = new Set(roster.slice(page * 25, (page + 1) * 25).map(player => String(player.userId)));
+        const selectedIds = interaction.values.map(String).filter(id => visibleIds.has(id));
+        raid.attendanceDraftAbsentIds = [...new Set([
+            ...(raid.attendanceDraftAbsentIds || []).filter(id => !visibleIds.has(id)), ...selectedIds
+        ])];
         saveRaid(messageId, raid);
-        const selected = roster.filter(player => raid.attendanceDraftAbsentIds.includes(String(player.userId)));
-        const lines = selected.map(player => `• ${player.mention || `<@${player.userId}>`} (${player.displayName})`).join('\n');
         return interaction.update({
-            content: t(language, 'raid.attendance.selected', { players: lines || t(language, 'raid.attendance.no_selection') }),
-            components: [attendanceConfirmRow(messageId, language)]
+            content: '', embeds: [buildAttendanceEmbed(interaction.client, raid, roster, { selected: true, page })],
+            components: roster.length > 25
+                ? attendancePromptComponents(messageId, roster, language, page, raid.attendanceDraftAbsentIds)
+                : [attendanceConfirmRow(messageId, language)]
         });
     }
+
+    if (action === 'page') return interaction.update({
+        content: '', embeds: [buildAttendanceEmbed(interaction.client, raid, roster, { selected: Boolean(raid.attendanceDraftAbsentIds?.length), page })],
+        components: attendancePromptComponents(messageId, roster, language, page, raid.attendanceDraftAbsentIds || [])
+    });
 
     if (action === 'reset') {
         raid.attendanceDraftAbsentIds = [];
         saveRaid(messageId, raid);
         return interaction.update({
-            content: t(language, 'raid.attendance.reset_prompt', { raidName: raid.zindan }),
+            content: '', embeds: [buildAttendanceEmbed(interaction.client, raid, roster)],
             components: attendancePromptComponents(messageId, roster, language)
         });
     }
 
-    if (action === 'all') {
-        const result = await finalizeAttendance(interaction.client, messageId, raid, []);
-        return interaction.update({
-            content: t(language, 'raid.attendance.all_present', { count: result.present.length }),
-            components: []
-        });
-    }
-
-    if (action === 'confirm') {
-        const result = await finalizeAttendance(interaction.client, messageId, raid, raid.attendanceDraftAbsentIds || []);
-        const penaltyLines = result.absenceResults
-            .filter(item => item.result.penaltyTriggered)
-            .map(item => `• ${item.player.mention || `<@${item.player.userId}>`} → **${t(language, 'raid.attendance.one_penalty')}**`);
-        const penalties = penaltyLines.length ? t(language, 'raid.attendance.penalties', { players: penaltyLines.join('\n') }) : '';
-        const summary = t(language, 'raid.attendance.summary', { present: result.present.length, absent: result.absent.length, penalties });
-        return interaction.update({ content: summary, components: [] });
+    if (action === 'all' || action === 'confirm') {
+        attendanceInProgress.add(messageId);
+        try {
+            // Acknowledge before waiting for player DMs; the existing finalizer owns all counters and persistence.
+            await interaction.deferUpdate();
+            await finalizeAttendance(interaction.client, messageId, raid, action === 'all' ? [] : raid.attendanceDraftAbsentIds || []);
+            return await interaction.editReply({ content: '', embeds: [buildAttendanceEmbed(interaction.client, raid, roster)], components: [] });
+        } finally { attendanceInProgress.delete(messageId); }
     }
 
     return null;
@@ -1902,6 +1959,9 @@ module.exports = {
     getAllRaids,
     buildRaidMessagePayload,
     _test: {
+        buildAttendanceEmbed,
+        attendancePromptComponents,
+        attendanceConfirmRow,
         buildAbsenceWarningEmbed,
         sendAbsenceWarning,
         buildRaidNotificationEmbed,

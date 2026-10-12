@@ -51,14 +51,14 @@ test('second absence and triggered/stacked penalties preserve actual counters an
     }
 });
 
-test('missing date and long raid name remain safe; organizer time and bot avatar are retained', () => {
+test('missing date and long raid name remain safe; organizer time is hidden and bot avatar retained', () => {
     const client = { user: { displayAvatarURL: () => 'https://cdn.discordapp.com/embed/avatars/0.png' } };
     const json = validate(buildAbsenceWarningEmbed(client, {}, {
         zindan: 'Long raid name '.repeat(300), organizerTimeZone: 'America/New_York',
         originalLocalDate: '2026-10-20', originalLocalTime: '21:00', organizerHourFormat: '12'
     }, result));
     assert.ok(json.fields.some(f => f.value === '**Tarih** / Date\n—'));
-    assert.match(JSON.stringify(json), /9:00 PM – America\/New_York/);
+    assert.doesNotMatch(JSON.stringify(json), /Organizer Time|America\/New_York/);
     assert.equal(json.footer.icon_url, client.user.displayAvatarURL());
 });
 

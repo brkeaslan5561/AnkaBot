@@ -16,7 +16,7 @@ Discord üzerinde zindan/trial kaydı, kalıcı oyuncu ekipman profili ve otomat
 - Binek menüsü role göre filtrelenir: DPS yalnızca Demonic Gravehound, Tunnel Vision, Giant Toad ve Bigby's Crushing Hand; tank/healer yalnızca takım debuff bineklerini görür.
 - Profil sihirbazında dinamik adım sayacı, seçili adet bilgisi, **Geri**, **İptal** ve son **Kaydet ve Katıl** onayı bulunur. Eser seçeneklerinde açıklama/tooltip gösterilmez.
 - Kayıtlı profil, aynı klas bir sonraki seçildiğinde otomatik yüklenir. Kullanıcı isterse **Profilimi Güncelle** düğmesini kullanabilir.
-- Raid başlamadan 30 dakika önce lidere büyük PNG taslağı ve varsa eksik atama uyarıları gönderilir.
+- Raid başlamadan 30 dakika önce lidere PNG taslağı ve onay mesajı gönderilir. Uyarı sayısı ve listesi mesajda gösterilmez; uyarılı planlarda ek onay adımı korunur.
 - Lider taslağı onaylayabilir, otomatik yenileyebilir veya oyuncu/alan bazında manuel değiştirebilir.
 - Başlamadan 15 dakika önce 2560 px genişliğindeki ilk plan PNG'si kanalda bir kez paylaşılır ve ana kadrodaki herkes etiketlenir.
 - T−15 ile T−5 arasındaki giriş, çıkış ve rol değişiklikleri sessizce biriktirilir; plan değişmişse T−5'te yalnızca bir güncel tablo paylaşılır.
@@ -107,7 +107,7 @@ npm run preview -- --all /tmp/anka-previews
 
 `previews/` altında 12 örnek üretilir: tam kadro TR/EN, 9 kişi, eksik tank/healer/DPS, karışık kayıt sırası, uzun oyuncu/ekipman isimleri, eksik ikon, manuel ekipman ataması ve dungeon. Projede manuel grup yerleşimi özelliği/veri alanı bulunmaz; mevcut lider düzenlemeleri ekipman içindir.
 
-PNG, `language: 'tr'` ve `language: 'en'` seçeneklerinde aynı iki dilli tasarımı kullanır: Türkçe sütun başlıklarının altında küçük İngilizce karşılıkları yer alır. Ekipman adları oyun içi İngilizce adlarıyla kalır. Discord mesajlarının ve lider uyarılarının mevcut dil seçimi değişmez. Uyarı paneli yalnızca PNG'den kaldırılmıştır.
+PNG, `language: 'tr'` ve `language: 'en'` seçeneklerinde aynı iki dilli tasarımı kullanır: Türkçe sütun başlıklarının altında küçük İngilizce karşılıkları yer alır. Ekipman adları oyun içi İngilizce adlarıyla kalır. Uyarı listesi PNG'de ve lider kontrol mesajında gösterilmez; uyarı hesaplaması ve ek onay adımı korunur.
 
 ## Emoji ve görselleri değiştirme
 
@@ -225,18 +225,29 @@ Manuel ekleme ve normal kayıt DM'leri aynı turuncu temayı kullanır. Türkçe
 
 ## Uluslararası raid oluşturma
 
-`/raid-oluştur` tek komuttur; İngilizce Discord istemcisinde `/create-raid` adı görünür. Yeni oluşturma sihirbazının tüm metinleri Türkçe/İngilizcedir. Katılım, manuel ekleme ve diğer yönetim ekranlarının dil sistemleri değişmez.
+`/raid-oluştur` tek komuttur; İngilizce Discord istemcisinde `/create-raid` adı görünür. Açıklamalar Türkçe kalın, İngilizce alt satırda italiktir; navigasyon kısa `Continue`, `Back`, `Cancel`, `Confirm` etiketlerini kullanır. Metinler mevcut `locales/tr.json` ve `locales/en.json` içindeki `raid.creation.ui.*` anahtarlarından gelir. Katılım, manuel ekleme ve diğer yönetim ekranlarının dil sistemleri değişmez.
+
+Oluşturma arayüzü dört adımdır:
+
+- **Select Raid (1/4):** Botun mevcut Discord avatarı, ortak mavi vurgu, iki dilli yönlendirme ve mevcut raid listesi. Özel raid için zindan/trial seçimi bu adımda kalır.
+- **Time Settings (2/4):** Saat dilimi, otomatik/24/12 saat biçimi ve gerekiyorsa AM/PM menüsü. Tek özet alanında ülke, IANA bölgesi ve çözümlenen biçim görünür. Saat girilmeden örnek saat gösterilmez. Bölgesel kodlar ana ekranda görünmez; saat dilimi menüsündeki **Bölgesel tercihler / Regional preferences** ile düzenlenebilir.
+- **Raid Details (3/4):** Native modal başlığında adım bilgisi; otomatik doldurulan raid adı, `YYYY-MM-DD` tarihi, seçilen biçime uygun saat ve isteğe bağlı açıklama. Native Gönder/İptal düğmeleri Discord tarafından yönetilir.
+- **Raid Preview (4/4):** Belirgin raid adı, tarih altında Discord timestamp, seçilen saat, saat dilimi ve varsa açıklama. Yeşil **Confirm** yayınlar; **Back** bilgileri koruyarak modalı açar; **Time Settings** saat tercihlerine döner. **Cancel** yalnızca mevcut taslağı iptal eder.
+
+Ekranlar aynı ephemeral mesajı günceller. Kayıtlı tercihler, geri dönüşte taslak bilgileri, 30 dakikalık oturum süresi ve çift yayınlama koruması korunur. Geçersiz modal girişi açıklamayı silmez; düzeltmek için modal tekrar açılabilir.
+
+Kurulu discord.js 14.27.0 ile embed, action row, select ve native modal kullanılır. Components V2 bayrağı geleneksel `content`/`embeds` alanlarını devre dışı bırakır ve sonradan kaldırılamaz; mevcut mesaj güncelleme ve hata/yeniden deneme akışını korumak için bu arayüz klasik embed kullanır. Bkz. [Discord bileşen belgeleri](https://docs.discord.com/developers/components/using-message-components). Yeni bağımlılık veya ortam değişkeni yoktur. Komut tanımı değişmediğinden ayrıca slash komutu kaydetmek gerekmez; normal bot yeniden başlatması yeterlidir.
 
 1. Raid veya özel zindan/trial seçilir.
 2. İlk kullanımda lider saat dilimini seçer. Sonraki kullanımlarda Discord kullanıcı ID'sine kayıtlı tercih gelir; değiştirilebilir. Discord'dan saat dilimi tahmini yapılmaz.
 3. Menüde olmayan bir bölge için **Diğer / IANA adı gir** ile herhangi bir geçerli IANA adı girilebilir (`Asia/Tokyo`, `Australia/Lord_Howe` gibi). İsteğe bağlı bölgesel kod, tarih/saat biçimini belirler (`en-US`, `en-GB`, `tr-TR` gibi).
 4. **Otomatik / 12 / 24 saat** seçilir. Türkiye, Londra, Berlin ve ABD'nin yaygın bölgeleri için açık bölge–locale eşleştirmeleri vardır; diğer bölgelerde kullanıcının bölgesel/Discord locale tercihi kullanılır. Kıta adına göre format tahmini yapılmaz. Her zaman 12/24 elle seçilebilir. 12 saat biçiminde AM/PM menüsü vardır; saat alanına doğrudan `9:15 PM` yazmak da mümkündür.
 5. Tarih `YYYY-MM-DD`, saat herhangi bir geçerli dakika ile girilir. `20:05`, `21:15`, `22:45` kabul edilir; hazır saat listesine bağlı değildir. Yıl açıkça girilir, geçmiş tarih sessizce sonraki yıla taşınmaz.
-6. Son önizlemede yerel tarih/saat, IANA bölgesi ve Discord timestamp görünür. **Onayla / Confirm** olmadan raid yayınlanmaz. Yinelenen onaylar aynı oturumda ikinci raid oluşturmaz.
+6. Son önizlemede yerel tarih/saat, IANA bölgesi ve Discord timestamp görünür. **Confirm** olmadan raid yayınlanmaz. Yinelenen onaylar aynı oturumda ikinci raid oluşturmaz.
 
 Saat dilimi hesaplamaları Node.js `Intl`/ICU IANA verisini kullanır. Yerel tarih/saatin olası UTC karşılıkları bölgenin o tarihteki gerçek offsetleriyle hesaplanır ve geri dönüşümle doğrulanır. Yaz saatinde atlanan saat reddedilir; iki kez yaşanan saat için iki UTC seçeneği gösterilir. Sabit UTC+3 hesabı veya AWS sistem saat dilimi kullanılmaz. Sunucudaki Node.js/ICU verisi güncel tutulmalıdır.
 
-Saat biçimini değiştirmek `21:00` ile `9:00 PM` görünümü arasında geçiş yapar; UTC anını değiştirmez. Discord `<t:...:F>`, `<t:...:t>` ve `<t:...:R>` etiketlerini okuyanın istemci ayarlarına göre gösterir. Ana raid kartı ve DM'lerde ayrıca **Raid Liderinin Saati / Organizer Time** sabit metni bulunur; burada liderin 12/24 tercihi korunur.
+Saat biçimini değiştirmek oluşturma ekranında `21:00` ile `9:00 PM` görünümü arasında geçiş yapar; UTC anını değiştirmez. Discord `<t:...:F>`, `<t:...:t>` ve `<t:...:R>` etiketlerini okuyanın istemci ayarlarına göre gösterir. Ana raid kartı ve DM'lerde tarih doğrudan **Tarih / Date** altında Discord timestamp ile gösterilir; ayrı lider saati veya yerel saat etiketi bulunmaz. Raid'in kayıtlı saat dilimi ve saat biçimi korunur.
 
 ### Saklanan veriler ve eski raidler
 

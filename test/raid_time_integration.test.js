@@ -41,18 +41,27 @@ test('authorized editing keeps the raid zone; foreign users/guilds cannot edit i
     assert.equal(raid.originalLocalTime, '21:15');
 });
 
-test('main card, signup DM and leader DM show organizer snapshot plus local Discord timestamps', () => {
+test('raid card and all DMs show timestamps without organizer/local-time labels', () => {
     const raid = fixture();
+    const snapshot = JSON.stringify(raid);
     const card = _test.raidEmbedOlustur(raid).toJSON();
-    assert.match(card.description, /20:00 – Europe\/Istanbul/);
     assert.ok(card.description.includes(`<t:${start}:F>`));
-    const dm = _test.buildRaidNotificationEmbed({}, raid, { role: 'dps' }).toJSON();
-    assert.match(JSON.stringify(dm), /20:00 – Europe\/Istanbul/);
-    assert.ok(JSON.stringify(dm).includes(`<t:${start}:t>`));
+    const messages = [card];
+    for (const variant of ['signup', 'manual', 'absence']) {
+        const dm = _test.buildRaidNotificationEmbed({}, raid, { role: 'dps' }, variant).toJSON();
+        assert.ok(dm.fields.some(f => f.value === `**Tarih** / Date\n<t:${start}:D>`));
+        assert.ok(JSON.stringify(dm).includes(`<t:${start}:t>`));
+        messages.push(dm);
+    }
     const plans = { tr: { rows: [], capacity: 10, warnings: [] }, en: { warnings: [] } };
     const leader = buildLeaderEmbed(raid, plans);
-    assert.match(JSON.stringify(leader.toJSON()), /Organizer Time/);
+    assert.ok(leader.toJSON().fields.find(f => f.name === 'Tarih / Date').value.includes(`<t:${start}:F>`));
     assert.ok(leader.length <= 6000);
+    messages.push(leader.toJSON());
+    for (const message of messages) {
+        assert.doesNotMatch(JSON.stringify(message), /Organizer Time|Raid Liderinin Saati|Your Local Time|Yerel Saatiniz|Europe\/Istanbul/);
+    }
+    assert.equal(JSON.stringify(raid), snapshot);
 });
 
 test('reloaded raids independently trigger the same UTC scheduler checkpoints', async () => {

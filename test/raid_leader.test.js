@@ -102,17 +102,17 @@ test('10/10 uyarısız embed, iki sütun, PNG ve iki dilli butonlar geçerli', (
     assert.equal(json.title, 'MSH — Master Soul Harvester');
     assert.equal(json.color, 0x5865f2);
     assert.equal(json.fields[1].value, '10 / 10');
-    assert.equal(json.fields[4].value, '0');
+    assert.equal(json.fields[4].name, 'Tarih / Date');
     assert.equal(json.image.url, 'attachment://raid-plan.png');
     assert.match(json.footer.text, /Gerekirse.*\nYou can/);
-    assert.match(json.fields[6].value, /Uyarı bulunmuyor.*No warnings found/);
+    assert.ok(!json.fields.some(field => /Warnings|uyarı/i.test(field.name)));
     assert.deepEqual(planActionRow('101').toJSON().components.map(b => [b.custom_id, b.style, b.label]), [
         ['raid_plan_approve_101', 3, 'Onayla / Approve'], ['raid_plan_edit_101', 1, 'Düzenle / Edit'], ['raid_plan_recalc_101', 2, 'Yenile / Regenerate']
     ]);
 });
 
 for (const scenario of ['empty', 'auras', 'both']) {
-    test(`${scenario}: gerçek uyarılar ve isimler iki dilde, sayı ve renk doğru`, () => {
+    test(`${scenario}: uyarılar hesaplanır fakat mesajda listelenmez, renk korunur`, () => {
         const { raid, players } = fixture();
         if (scenario !== 'auras') players.pop();
         if (scenario !== 'empty') players.filter(p => p.role === 'tank').forEach(p => { p.inventory.auras = []; });
@@ -120,9 +120,10 @@ for (const scenario of ['empty', 'auras', 'both']) {
         const embed = buildLeaderEmbed(raid, plans);
         const json = embed.toJSON();
         assert.equal(json.color, 0xf1a93b);
-        assert.equal(json.fields[4].value, String(plans.tr.warnings.length));
-        const details = json.fields.slice(6).map(f => f.value).join('\n');
-        for (const warning of [...plans.tr.warnings, ...plans.en.warnings]) assert.ok(details.includes(warning));
+        assert.ok(plans.tr.warnings.length > 0);
+        assert.ok(!json.fields.some(field => /Warnings|uyarı/i.test(field.name)));
+        const details = JSON.stringify(json);
+        for (const warning of [...plans.tr.warnings, ...plans.en.warnings]) assert.ok(!details.includes(warning));
         validate({ embeds: [embed] });
         raid.planApproved = true;
         assert.equal(buildLeaderEmbed(raid, plans).toJSON().color, 0x2ecc71);
@@ -130,7 +131,7 @@ for (const scenario of ['empty', 'auras', 'both']) {
     });
 }
 
-test('çok sayıda uzun gerçek uyarı Discord sınırlarına göre kısaltılır', () => {
+test('çok sayıda uzun gerçek uyarı embed alanlarına eklenmez; ek onay korunur', () => {
     const { raid, players } = fixture();
     raid.zindan = 'Raid '.repeat(200);
     players.forEach((player, index) => {
@@ -140,8 +141,19 @@ test('çok sayıda uzun gerçek uyarı Discord sınırlarına göre kısaltılı
     const plans = plansFor(raid, players);
     const embed = buildLeaderEmbed(raid, plans, { confirmation: true, error: true });
     validate({ embeds: [embed] });
-    assert.equal(embed.toJSON().fields[4].value, String(plans.tr.warnings.length));
-    assert.ok(embed.toJSON().fields.some(f => f.name.includes('More warnings')));
+    assert.ok(plans.tr.warnings.length > 0);
+    assert.ok(!embed.toJSON().fields.some(f => /warnings|uyarı/i.test(f.name)));
+    assert.match(embed.toJSON().description, /Warnings detected/);
+});
+
+test('lider mesajındaki eksik veya geçersiz tarih güvenli gösterilir', () => {
+    const { raid, players } = fixture();
+    const plans = plansFor(raid, players);
+    for (const unixZamani of [undefined, null, 'invalid', Infinity, 1e20]) {
+        const embed = buildLeaderEmbed({ ...raid, unixZamani }, plans);
+        validate({ embeds: [embed] });
+        assert.equal(embed.toJSON().fields.find(f => f.name === 'Tarih / Date').value, '—');
+    }
 });
 
 test('ilk DM tek mesajdır; yenilemede aynı mesaj ve tek yeni attachment kullanılır', async () => {
@@ -219,7 +231,9 @@ test('manuel düzenleme mevcut menüyü açar; kayıt sonrası ana embed ve PNG 
     await h.controller.handle(selection);
     assert.equal(h.raid.planOverrides['1'].artifact, null);
     assert.equal(h.raid.planApproved, false);
-    assert.equal(main.payload.embeds[0].toJSON().fields[4].value, '1');
+    assert.equal(h.raid.plan.warnings.length, 1);
+    assert.equal(main.payload.embeds[0].toJSON().color, 0xf1a93b);
+    assert.ok(!main.payload.embeds[0].toJSON().fields.some(f => /warnings|uyarı/i.test(f.name)));
     assert.equal(h.events.filter(e => e.kind === 'dm').length, 1);
     assert.equal(main.files.length, 1);
     assert.ok(selection.deferred);

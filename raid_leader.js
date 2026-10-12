@@ -1,6 +1,5 @@
 const { randomBytes } = require('crypto');
 const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { organizerTime } = require('./raid_time');
 
 const INSTRUCTIONS = 'Gerekirse atamaları düzenleyebilir veya tabloyu yeniden oluşturabilirsiniz. Kadroyu kontrol ettikten sonra onaylayın.\nYou can edit assignments or regenerate the plan if needed. Please review the roster before approving.';
 const trim = (value, limit) => {
@@ -8,31 +7,12 @@ const trim = (value, limit) => {
     return text.length > limit ? `${text.slice(0, limit - 1).replace(/[\uD800-\uDBFF]$/, '')}…` : text;
 };
 
-function warningFields(tr = [], en = []) {
-    if (!tr.length) return [{ name: 'Uyarılar / Warnings', value: 'Uyarı bulunmuyor. / No warnings found.' }];
-    const fields = [];
-    let value = '';
-    let used = 0;
-    let shown = 0;
-    for (let index = 0; index < tr.length; index++) {
-        const pair = `⚠️ ${trim(tr[index], 450)}\n${trim(en[index] || tr[index], 450)}`;
-        if (used + pair.length + 2 > 3600) break;
-        if (value.length + pair.length + 2 > 1000) {
-            fields.push({ name: fields.length ? 'Uyarılar / Warnings (devam / continued)' : 'Uyarılar / Warnings', value });
-            value = '';
-        }
-        value += `${value ? '\n\n' : ''}${pair}`;
-        used += pair.length + 2;
-        shown++;
-    }
-    if (value) fields.push({ name: fields.length ? 'Uyarılar / Warnings (devam / continued)' : 'Uyarılar / Warnings', value });
-    if (shown < tr.length) fields.push({ name: 'Diğer uyarılar / More warnings', value: `${tr.length - shown} uyarı daha var; liste kısaltıldı.\n${tr.length - shown} more warnings; the list was shortened.` });
-    return fields;
-}
-
 function buildLeaderEmbed(raid, plans, { confirmation = false, error = false, imageName = 'raid-plan.png', title } = {}) {
     const plan = plans.tr;
     const warningCount = plan.warnings?.length || 0;
+    const timestamp = Number(raid.unixZamani);
+    const dateText = timestamp > 0 && Number.isFinite(new Date(timestamp * 1000).getTime())
+        ? `<t:${Math.floor(timestamp)}:F> • <t:${Math.floor(timestamp)}:R>` : '—';
     // Error > approved > warnings > pending. Approved plans stay green even with acknowledged warnings.
     const color = error ? '#ED4245' : raid.planApproved ? '#2ECC71' : warningCount ? '#F1A93B' : '#5865F2';
     const embed = new EmbedBuilder().setColor(color)
@@ -45,16 +25,10 @@ function buildLeaderEmbed(raid, plans, { confirmation = false, error = false, im
             { name: 'Oyuncular / Players', value: `${plan.rows?.length || 0} / ${plan.capacity || raid.capacity || 10}`, inline: true },
             { name: '\u200b', value: '\u200b', inline: true },
             { name: 'Durum / Status', value: raid.planApproved ? 'Onaylandı / Approved' : 'Onay Bekliyor / Pending Approval', inline: true },
-            { name: 'Uyarılar / Warnings', value: String(warningCount), inline: true },
-            { name: '\u200b', value: '\u200b', inline: true },
-            ...warningFields(plan.warnings, plans.en?.warnings)
+            { name: 'Tarih / Date', value: dateText, inline: true },
+            { name: '\u200b', value: '\u200b', inline: true }
         )
         .setFooter({ text: INSTRUCTIONS });
-    const organizer = organizerTime(raid);
-    if (organizer) embed.addFields(
-        { name: 'Raid Liderinin Saati / Organizer Time', value: organizer },
-        { name: 'Yerel Saatiniz / Your Local Time', value: `<t:${Math.floor(raid.unixZamani)}:F> • <t:${Math.floor(raid.unixZamani)}:R>` }
-    );
     if (imageName) embed.setImage(`attachment://${imageName}`);
     if (error) embed.addFields({ name: 'Hata / Error', value: 'Kontrol mesajı güncellenemedi. Yenile düğmesiyle tekrar deneyin.\nThe review message could not be updated. Please try Regenerate.' });
     return embed;
