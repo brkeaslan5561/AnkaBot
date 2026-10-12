@@ -9,7 +9,8 @@ Discord üzerinde zindan/trial kaydı, kalıcı oyuncu ekipman profili ve otomat
 - `/raid-oyuncu-ekle` otomatik tamamlaması yalnızca açık raidleri gösterir ve en yeni raidleri listenin başına alır.
 - Hazır içeriklerin yanında özel zindan/trial adı ve türü girilebilir.
 - Zindan ana kadrosu 5, trial ana kadrosu 10 kişidir. Kapasite dolunca yeni kayıt otomatik yedeğe alınır.
-- Ana kadrodan biri ayrıldığında raid liderine aynı rol için yedek önerilir. Beş dakika cevap verilmezse önerilen oyuncu otomatik geçirilir.
+- Ana kadrodan biri ayrıldığında raid liderine yedek önerilir. Yedek yalnızca lider onayladığında ana kadroya alınır; yanıt gelmemesi veya lider DM'sinin gönderilememesi otomatik atama yapmaz. Eski kayıtlardaki onay süreleri de otomatik atama başlatmaz.
+- Yedekteki oyuncu boş kontenjan varsa rol düğmesinden kendisi katılabilir; bu gönüllü katılım lider onayı beklemez. Yalnızca profil/ekipman güncellemek oyuncuyu yedekten çıkarmaz.
 - Kullanıcının eser, binek gücü, yoldaş ve aura envanteri Discord kullanıcı kimliği + klas adına göre `raid_profiles.json` içinde saklanır.
 - Eser, binek ve yoldaş PNG'leri ilk açılışta botun uygulama emojileriyle eşleştirilir; seçim menülerinde isimlerin yanında gerçek ikonları görünür.
 - Binek menüsü role göre filtrelenir: DPS yalnızca Demonic Gravehound, Tunnel Vision, Giant Toad ve Bigby's Crushing Hand; tank/healer yalnızca takım debuff bineklerini görür.
@@ -21,7 +22,9 @@ Discord üzerinde zindan/trial kaydı, kalıcı oyuncu ekipman profili ve otomat
 - T−15 ile T−5 arasındaki giriş, çıkış ve rol değişiklikleri sessizce biriktirilir; plan değişmişse T−5'te yalnızca bir güncel tablo paylaşılır.
 - T−5'ten sonra oluşan değişiklikler yeni mesaj üretmez; plan değişmişse etkinlik başladığı anda tek bir **Nihai raid planı** paylaşılır.
 - PNG oluşturucu kendi DejaVu Sans fontunu paket içinden yükler; AWS makinesine ayrıca font kurmak gerekmez.
-- Kadro eksikse tablo yine 5/10 satırla hazırlanır; eksik oyuncu ve eşya hücreleri boş kalır.
+- PNG'de standart dungeon 5 slot, trial iki grup halinde 10 slot gösterir. Her beşli Tank → Healer → DPS → DPS → DPS sırasındadır; eksik rolün yeri `BOŞ SLOT / EMPTY SLOT` olarak kalır.
+- PNG sıralaması kayıt sırasını, ekipman atamalarını veya katılım verisini değiştirmez. Aynı roldeki oyuncuların kayıt sırası korunur. Standart rol dağılımını aşan oyuncular kaybolmamaları için boş rol slotlarının yerine değil tablonun sonuna eklenir.
+- Pack Tactics envanterinde bulunan her tanka kesin atanır. Healer ataması veya eski manuel aura seçimi tankın Pack Tactics atamasını kaldıramaz; diğer manuel ekipman atamaları korunur.
 - Eski sürümde oluşturulan `raid_bas_*`, `raid_klas_secim_*` ve `raid_cikis` bileşenleriyle uyumluluk korunur.
 
 `Yoldaş mor güçleri` ve `grup bonusları` bu sürüme bilerek dahil edilmemiştir.
@@ -91,7 +94,19 @@ Botun kullandığı gerçek çizim koduyla örnek oluşturmak için:
 npm run preview
 ```
 
-Çıktı proje kökünde `Anka_Raid_Plan_Ornek.png` adıyla oluşur. Trial tablosu 2560×1460 px boyutundadır ve 10 satırın tamamını içerir.
+Çıktı proje kökünde `Anka_Raid_Plan_Ornek.png` adıyla oluşur. Standart trial örneği 2560×1332, dungeon örneği 2560×768 pikseldir. Uzun metinler kesilmeden sarılır; bütün satırlar en uzun hücreye göre eşit yükseklikte büyür. Metin yerleşimi Sharp'ın mevcut [Pango metin desteğini](https://sharp.pixelplumbing.com/api-constructor/) kullanır; yeni bağımlılık eklenmemiştir.
+
+Tüm kontrol senaryolarının gerçek PNG'lerini üretmek için:
+
+```bash
+npm run preview -- --all
+# İsteğe bağlı çıktı klasörü:
+npm run preview -- --all /tmp/anka-previews
+```
+
+`previews/` altında 12 örnek üretilir: tam kadro TR/EN, 9 kişi, eksik tank/healer/DPS, karışık kayıt sırası, uzun oyuncu/ekipman isimleri, eksik ikon, manuel ekipman ataması ve dungeon. Projede manuel grup yerleşimi özelliği/veri alanı bulunmaz; mevcut lider düzenlemeleri ekipman içindir.
+
+PNG, `language: 'tr'` ve `language: 'en'` seçeneklerinde aynı iki dilli tasarımı kullanır: Türkçe sütun başlıklarının altında küçük İngilizce karşılıkları yer alır. Ekipman adları oyun içi İngilizce adlarıyla kalır. Discord mesajlarının ve lider uyarılarının mevcut dil seçimi değişmez. Uyarı paneli yalnızca PNG'den kaldırılmıştır.
 
 ## Emoji ve görselleri değiştirme
 
@@ -99,10 +114,20 @@ npm run preview
 - Eser görselleri: `assets/raid/artifacts/`
 - Binek görselleri: `assets/raid/mounts/`
 - Yoldaş görselleri: `assets/raid/companions/`
-- Logo: `assets/raid/anka-logo.png`
-- Aura ikonları kodla çizilir; renk/şekilleri `raid_table.js` içindeki `auraIcon` fonksiyonundan değiştirilebilir.
+- Aura görselleri: `assets/raid/auras/`
+- Logo: Dark Phoenix teması için gönderilen `logoo.png-Photoroom.png`, `assets/raid/anka-logo.png` olarak kullanılır. Bu yerel logo önceliklidir; dosya eksik veya bozuksa Discord avatarı denenir. PNG renkleri `raid_table.js` içindeki `THEME` nesnesinde tanımlıdır.
 
-Yeni görselin dosya adını değiştirirseniz `raid_catalog.js` içindeki ilgili `icon` yolunu da güncelleyin. Bir eşya ikonunu değiştirdiğinizde mevcut uygulama emojisini Discord Developer Portal'dan bir kez silip botu yeniden başlatırsanız yeni PNG otomatik yüklenir.
+| Görsel | PNG dosyası |
+| --- | --- |
+| Mystic Aura | `assets/raid/auras/mystic-aura.png` |
+| Runic Aura | `assets/raid/auras/runic-aura.png` |
+| Pack Tactics | `assets/raid/auras/pack-tactics.png` |
+| Demonic Gravehound | `assets/raid/mounts/demonic-gravehound.png` |
+| Blue Fire Eye | `assets/raid/companions/blue-fire-eye.png` |
+
+Bu beş dosyanın merkezi PNG eşleştirmesi `raid_table.js` içindeki `PNG_ICON_PATHS` alanındadır; diğer ikonlar `raid_catalog.js` içindeki `icon` yollarını kullanır. PNG yolları Linux'ta da büyük/küçük harf farkını tolere eder. Aynı isimli dosyayı değiştirmek bir sonraki PNG üretiminde yeterlidir; botu yeniden başlatmak gerekmez. Önceden paylaşılmış PNG dosyaları değişmez. Tüm ekipman ikonları 56×56 alana sığdırılır; eksik/bozuk dosyada isim korunur ve sade kare yer tutucu kullanılır. Aura bilgisi yoksa yalnızca `—` görünür.
+
+Discord seçim menülerindeki uygulama emojileri PNG'den bağımsızdır. Bunları da güncellemek isterseniz eski uygulama emojisini Discord Developer Portal'dan silip botu yeniden başlatmanız gerekir; bu değişiklik emoji senkronizasyonunu değiştirmez.
 
 ## Çalışma verileri
 
@@ -188,3 +213,11 @@ Yeni komutlar bot başlatılırken mevcut global komut kayıt sistemiyle otomati
 - `announcements.json`: Taslak ve yayınlanmış duyuruların Türkçe/İngilizce metinleri ile raid/mesaj bağlantıları
 
 Bu dosyalar Git tarafından izlenmez ve ilk kullanımda güvenli şekilde oluşturulur. Şema dönüşümü veya ayrı bir veritabanı kurulumu gerekmez.
+
+## Manuel ekleme DM bildirimi
+
+`/raid-oyuncu-ekle`, yeni bir Discord kullanıcısının kaydı başarıyla diske yazıldıktan sonra tek bir Türkçe/İngilizce embed DM gönderir. Mevcut kaydı güncellemek, rol değiştirmek, PNG yenilemek ve botu yeniden başlatmak bildirim göndermez. Oyuncu çıkarılıp yeniden eklenirse yeni bildirim gönderilir. `/düzenle` mevcut projede yalnızca raid tarihi, saati ve açıklamasını değiştirir; oyuncu eklemez.
+
+Bildirim gerçek yerleşimi (yedek dahil) ve `unixZamani` değerini `Europe/Istanbul` saat diliminde gösterir. Geçerli kayıtlı sunucu, kanal ve mesaj kimlikleri varsa raid bağlantısı eklenir. Discord kimliği olmayan katılımcılar atlanır. DM hataları kalıcı/geçici/bilinmeyen olarak loglanır; kayıt korunur, lidere mevcut ephemeral yanıtta bilgi verilir ve yeniden gönderim denenmez. Bildirim geçmişi için yeni dosya veya veri şeması eklenmez.
+
+Örnek gerçek EmbedBuilder çıktısı: `previews/manual-raid-add-embed.json`. Bildirim testleri: `node --test test/raid_manual_notification.test.js` (Discord ve disk yazımları testte taklit edilir).

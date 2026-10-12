@@ -204,10 +204,14 @@ function auraSlots(contentType) {
 }
 
 function assignAuras(players, contentType) {
-    const supportPlayers = players.filter(player => roleOf(player) !== 'dps');
-    const slots = auraSlots(contentType);
+    const pack = auras.find(item => item.id === 'pack_tactics');
+    const tanks = players.filter(player => roleOf(player) === 'tank' && owns(player, 'auras', pack));
+    const result = new Map(tanks.map(player => [player.userId, pack.name]));
+    const supportPlayers = players.filter(player => roleOf(player) !== 'dps' && !result.has(player.userId));
+    let reservedPacks = tanks.length;
+    const slots = auraSlots(contentType).filter(slot => slot.kind !== 'pack' || reservedPacks-- <= 0);
 
-    return assignUnique(supportPlayers, slots, (player, slot, _slotIndex, playerIndex) => {
+    const remaining = assignUnique(supportPlayers, slots, (player, slot, _slotIndex, playerIndex) => {
         const role = roleOf(player);
         const item = slot.items[0];
         if (!owns(player, 'auras', item)) return null;
@@ -224,6 +228,8 @@ function assignAuras(players, contentType) {
             score: ASSIGNMENT_BASE + roleBonus + (100 - item.rank) * 100 + (100 - playerIndex)
         };
     });
+    for (const [userId, name] of remaining) result.set(userId, name);
+    return result;
 }
 
 function assignmentLimit(category, item, rowRole, contentType) {
@@ -247,6 +253,10 @@ function applyOverrides(plan, overrides, players, contentType, language = 'tr') 
     const playerMap = new Map(players.map(player => [String(player.userId), player]));
     const rowMap = new Map(plan.rows.map(row => [String(row.userId), row]));
     const overrideWarnings = [];
+    const pack = auras.find(item => item.id === 'pack_tactics');
+    const protectedTanks = new Set(players
+        .filter(player => roleOf(player) === 'tank' && owns(player, 'auras', pack))
+        .map(player => String(player.userId)));
 
     for (const [userId, categories] of Object.entries(overrides)) {
         const row = rowMap.get(String(userId));
@@ -256,6 +266,11 @@ function applyOverrides(plan, overrides, players, contentType, language = 'tr') 
         for (const [category, requestedValue] of Object.entries(categories)) {
             const info = categoryInfo(category);
             if (!info) continue;
+            // A tank who owns Pack Tactics must keep it, including after leader overrides.
+            if (category === 'aura' && protectedTanks.has(String(userId))) {
+                row.aura = pack.name;
+                continue;
+            }
 
             if (requestedValue === null || requestedValue === '') {
                 row[category] = null;
@@ -276,9 +291,12 @@ function applyOverrides(plan, overrides, players, contentType, language = 'tr') 
             });
 
             const mustClear = Math.max(0, conflicts.length - limit + 1);
+            const clearable = conflicts.filter(otherRow =>
+                category !== 'aura' || !protectedTanks.has(String(otherRow.userId)));
+            if (clearable.length < mustClear) continue;
             for (let index = 0; index < mustClear; index += 1) {
-                conflicts[index][category] = null;
-                overrideWarnings.push(t(language, 'raid.assignment.override_conflict', { player: conflicts[index].displayName, value: requestedValue }));
+                clearable[index][category] = null;
+                overrideWarnings.push(t(language, 'raid.assignment.override_conflict', { player: clearable[index].displayName, value: requestedValue }));
             }
             row[category] = item.name;
         }

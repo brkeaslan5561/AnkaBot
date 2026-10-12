@@ -16,6 +16,7 @@ const path = require('path');
 const { selectOptions, findCatalogItem } = require('./raid_catalog');
 const { assignRaid, inventoryOf } = require('./raid_assignment');
 const { renderRaidTable } = require('./raid_table');
+const { createLeaderReview } = require('./raid_leader');
 const {
     t,
     getGuildLanguage,
@@ -29,7 +30,6 @@ const RAID_DATA_DOSYASI = path.join(__dirname, 'raid_data.json');
 const PROFIL_DATA_DOSYASI = path.join(__dirname, 'raid_profiles.json');
 const KATILIM_DATA_DOSYASI = path.join(__dirname, 'raid_attendance.json');
 const NONE_VALUE = '__none__';
-const RESERVE_APPROVAL_MS = 5 * 60 * 1000;
 const DRAFT_BEFORE_SECONDS = 30 * 60;
 const FINAL_BEFORE_SECONDS = 15 * 60;
 const CHECKPOINT_BEFORE_SECONDS = 5 * 60;
@@ -926,11 +926,10 @@ async function promoteReserve(client, messageId, selectedUserId = null) {
 
 async function requestReserveApproval(client, messageId, raid, role) {
     const candidate = findReserveCandidate(raid, role);
-    if (!candidate) return { candidate: null, autoPromoted: false };
+    if (!candidate) return { candidate: null, approvalSent: false };
     raid.pendingReserve = {
         role,
-        candidateUserId: candidate.userId,
-        deadline: Date.now() + RESERVE_APPROVAL_MS
+        candidateUserId: candidate.userId
     };
     saveRaid(messageId, raid);
 
@@ -942,11 +941,10 @@ async function requestReserveApproval(client, messageId, raid, role) {
             content: t(language, 'raid.reserve.request', { raidName: raid.zindan, role: roleLabel(language, role), player: candidate.mention }),
             components: [reserveApprovalRow(messageId, language)]
         });
-        return { candidate, autoPromoted: false };
+        return { candidate, approvalSent: true };
     } catch (error) {
-        console.warn(`Reserve approval DM failed (${messageId}); promoting automatically:`, error.message);
-        const promoted = await promoteReserve(client, messageId, candidate.userId);
-        return { candidate: promoted, autoPromoted: true };
+        console.warn(`Reserve approval DM failed (${messageId}); slot remains empty pending leader approval:`, error.message);
+        return { candidate, approvalSent: false };
     }
 }
 
@@ -1087,16 +1085,96 @@ async function finalizeAttendance(client, messageId, raid, absentUserIds = []) {
     return { alreadyCompleted: false, absent, present, absenceResults };
 }
 
+function buildManualRaidAddEmbed(client, messageId, raid, player) {
+    const timestamp = Number(raid.unixZamani);
+    const date = new Date(timestamp * 1000);
+    const hasDate = timestamp > 0 && Number.isFinite(date.getTime());
+    const dateText = hasDate
+        ? date.toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', year: 'numeric' })
+        : '—';
+    const timeText = hasDate
+        ? `${date.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hour12: false })} (TR)`
+        : '—';
+    const role = ['tank', 'heal', 'dps', 'yedek'].includes(player.role) ? player.role : null;
+    const roleTr = role ? roleLabel('tr', role) : '—';
+    const roleEn = role ? roleLabel('en', role) : '—';
+    const embed = new EmbedBuilder()
+        .setColor('#E58A3B')
+        .setTitle("Raid'e Eklendiniz!")
+        .setDescription('*You Have Been Added to a Raid!*\n\nBir raid lideri tarafından aşağıdaki organizasyona manuel olarak eklendiniz.\n*You have been manually added to the following raid by a raid leader.*')
+        .addFields(
+            { name: 'Raid', value: String(raid.zindan || raid.zindanKodu || '—').slice(0, 1024), inline: true },
+            { name: 'Rol / Role', value: roleTr === roleEn ? roleTr : `${roleTr}\n*${roleEn}*`, inline: true },
+            { name: '\u200b', value: '\u200b', inline: true },
+            { name: 'Tarih / Date', value: dateText, inline: true },
+            { name: 'Saat / Time', value: timeText, inline: true },
+            { name: '\u200b', value: '\u200b', inline: true },
+            { name: '\u200b', value: 'Lütfen raid saatinde hazır olun.\n*Please be ready at the scheduled raid time.*' }
+        );
+    // Use only IDs stored with the original raid; never substitute the command's channel.
+    if ([raid.guildId, raid.channelId, messageId].every(id => /^\d{17,20}$/.test(String(id || '')))) {
+        embed.addFields({ name: '\u200b', value: `[Raid'e Git / View Raid](https://discord.com/channels/${raid.guildId}/${raid.channelId}/${messageId})` });
+    }
+    const avatar = client.user?.displayAvatarURL?.({ extension: 'png', size: 128, forceStatic: true });
+    return embed.setFooter({ text: 'AnkaBot • Raid Notification', ...(avatar ? { iconURL: avatar } : {}) });
+}
+
+async function sendManualRaidAddNotification(client, messageId, raid, user, registration) {
+    // Called only after saveRaid succeeds. Existing records (including reserves) are updates.
+    if (registration.existing || !/^\d{17,20}$/.test(String(user?.id || ''))
+        || String(registration.record?.userId) !== String(user.id) || user.bot || typeof user.send !== 'function') {
+        return 'skipped';
+    }
+    try {
+        const embed = buildManualRaidAddEmbed(client, messageId, raid, registration.record);
+        await user.send({ embeds: [embed] });
+        return 'sent';
+    } catch (error) {
+        const permanent = [50007, 50013, 10013].includes(Number(error.code));
+        const transient = error.status === 429 || error.status >= 500
+            || ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error.code);
+        const kind = permanent ? 'permanent' : transient ? 'transient' : 'unknown';
+        console.warn(`Manual raid add DM failed (raid=${messageId}, user=${user.id}, kind=${kind}, code=${error.code || error.status || 'unknown'}):`, error.message);
+        // No retry: an uncertain API response must not produce duplicate notifications.
+        return 'failed';
+    }
+}
+
 async function sendRegistrationReminder(client, messageId, raid, user, role, isReserve = false) {
     const userId = String(user.id);
     if (raid.registrationReminderSentUsers.includes(userId)) return false;
     try {
-        const versions = ['tr', 'en'].map(language => t(language, 'raid.registration.dm', {
-            raidName: raid.zindan,
-            raidDate: raid.tarih,
-            role: isReserve ? roleLabel(language, 'yedek') : roleLabel(language, role)
-        }));
-        await user.send(`${versions[0]}\n\n**For English speakers:**\n${versions[1]}`);
+        const timestamp = Number(raid.unixZamani);
+        const date = new Date(timestamp * 1000);
+        const hasDate = timestamp > 0 && Number.isFinite(date.getTime());
+        // Explicit timezone keeps the displayed raid time independent of the host/client timezone.
+        const dateText = hasDate
+            ? date.toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', year: 'numeric' })
+            : String(raid.tarih || '—').slice(0, 1000);
+        const timeText = hasDate
+            ? date.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hour12: false })
+            : '—';
+        const selectedRole = isReserve ? 'yedek' : role;
+        const roleTr = roleLabel('tr', selectedRole);
+        const roleEn = roleLabel('en', selectedRole);
+        const roleText = roleTr === roleEn ? roleTr : `${roleTr}\n${roleEn}`;
+        const embed = new EmbedBuilder()
+            .setColor('#36C994')
+            .setTitle('✅ Kayıt Başarılı / Signup Confirmed')
+            .setDescription(`ANKA RAID BOT\n\n**${String(raid.zindan || '—').slice(0, 1000)}**`)
+            .addFields(
+                { name: 'Tarih / Date', value: `**${dateText}**`, inline: true },
+                { name: 'Saat / Time', value: `**${timeText}** (TSİ / TRT)`, inline: true },
+                // Discord fits up to three inline fields per row; leave the third column empty.
+                { name: '\u200b', value: '\u200b', inline: true },
+                { name: 'Rol / Role', value: `**${roleText.slice(0, 1000)}**`, inline: true },
+                { name: 'Kalan / Remaining', value: hasDate ? `**${formatDiscordTimestamp(timestamp, 'R')}**` : '—', inline: true },
+                { name: '\u200b', value: '\u200b', inline: true },
+                { name: '⚠️ 15 dakika önce hazır olun.', value: 'Please be ready 15 minutes early.' },
+                { name: '⚠️ Katılmayan oyuncular yoklamada işaretlenebilir.', value: 'No-shows may be marked absent.' }
+            )
+            .setFooter({ text: 'Ashes of Anka • Raid Management' });
+        await user.send({ embeds: [embed] });
         raid.registrationReminderSentUsers.push(userId);
         raid.registrationReminderSentUsers = raid.registrationReminderSentUsers.slice(-100);
         saveRaid(messageId, raid);
@@ -1114,82 +1192,59 @@ function generatePlan(raid, language = raidLanguage(raid)) {
     return plan;
 }
 
-function warningText(plan, language = 'tr') {
-    if (!plan.warnings?.length) return t(language, 'raid.plan.no_warnings');
-    const lines = plan.warnings.map(warning => `• ${warning}`);
-    let text = `${t(language, 'raid.plan.warning_heading', { count: plan.warnings.length })}\n`;
-    for (const line of lines) {
-        if ((text + line).length > 1700) {
-            text += `\n${t(language, 'raid.plan.more_warnings', { count: lines.length - text.split('\n').length + 1 })}`;
-            break;
+const leaderReview = createLeaderReview({
+    getRaid: messageId => raidHafizasi.get(String(messageId)),
+    canManage: leaderOwnsRaid,
+    isClosed: raid => raid.kapandi || isRaidClosed(raid),
+    fingerprint: raid => JSON.stringify({
+        input: planInputFingerprint(raid),
+        name: raid.zindan,
+        capacity: raid.capacity,
+        time: raid.unixZamani,
+        players: mainParticipants(raid).map(player => [player.userId, player.displayName])
+    }),
+    title: raid => {
+        const known = zindanListesi.find(item => item.value === raid.zindanKodu || item.value === raid.zindan);
+        return !raid.zindan || raid.zindan === known?.value ? known?.label || raid.zindanKodu : raid.zindan;
+    },
+    generatePlans: raid => ({
+        tr: generatePlan(raid, 'tr'),
+        en: assignRaid(raid, mainParticipants(raid), raid.planOverrides, 'en')
+    }),
+    render: (client, raid, plan) => renderRaidTable(raid, plan, { language: 'tr', botUser: client.user }),
+    save: saveRaid,
+    openEditor: async (interaction, messageId, raid) => {
+        const language = interactionLanguage(interaction);
+        if (!mainParticipants(raid).length) {
+            await privateReply(interaction, { content: t(language, 'raid.plan.no_players') });
+            return null;
         }
-        text += `${line}\n`;
+        await privateReply(interaction, {
+            content: t(language, 'raid.plan.choose_player'),
+            components: [new ActionRowBuilder().addComponents(planPlayerMenu(messageId, raid, language))]
+        });
+        return interaction.fetchReply();
+    },
+    setAssignment: (raid, userId, category, value) => {
+        if (!['artifact', 'mount', 'companion', 'aura'].includes(category) || !findParticipant(raid, userId)) {
+            throw new Error('Invalid raid plan assignment');
+        }
+        if (!raid.planOverrides[userId]) raid.planOverrides[userId] = {};
+        raid.planOverrides[userId][category] = value === NONE_VALUE ? null : value;
+        raid.planApproved = false;
+        raid.planNeedsRefresh = true;
     }
-    return text.trim();
-}
-
-function planActionRow(messageId, language = 'tr') {
-    return new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`raid_plan_approve_${messageId}`).setLabel(t(language, 'raid.plan.approve')).setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`raid_plan_edit_${messageId}`).setLabel(t(language, 'raid.plan.edit')).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`raid_plan_recalc_${messageId}`).setLabel(t(language, 'raid.plan.recalculate')).setStyle(ButtonStyle.Secondary)
-    );
-}
+});
 
 async function sendDraft(client, messageId, raid, reasonKey = null) {
-    const language = languageForUser(raid.creatorId, { guildId: raid.guildId });
-    const plan = generatePlan(raid, language);
-    const image = await renderRaidTable(raid, plan, { status: t(language, raid.planApproved ? 'raid.table.approved' : 'raid.table.draft'), language });
-    const attachment = new AttachmentBuilder(image, { name: `anka-${String(raid.zindanKodu || 'raid').toLowerCase()}-taslak.png` });
-    const content = `${t(language, 'raid.plan.draft_heading', { raidName: raid.zindan })}${reasonKey ? `\n${t(language, reasonKey)}` : ''}\n\n${warningText(plan, language)}`;
-    const payload = { content, files: [attachment], components: [planActionRow(messageId, language)] };
-    let sent = false;
-
-    try {
-        if (!raid.creatorId) throw new Error('Raid lideri bilinmiyor.');
-        const leader = await client.users.fetch(raid.creatorId);
-        await leader.send(payload);
-        sent = true;
-    } catch (error) {
-        console.warn(`Raid plan draft DM failed (${messageId}); falling back to channel:`, error.message);
-        try {
-            const channel = await client.channels.fetch(raid.channelId);
-            if (channel?.send) {
-                const sharedLanguage = raidLanguage(raid);
-                const leaderLine = raid.creatorMention || (raid.creatorId
-                    ? `<@${raid.creatorId}>`
-                    : t(sharedLanguage, 'raid.plan.leader_missing'));
-                const sharedPlan = generatePlan(raid, sharedLanguage);
-                const sharedImage = await renderRaidTable(raid, sharedPlan, {
-                    status: t(sharedLanguage, raid.planApproved ? 'raid.table.approved' : 'raid.table.draft'),
-                    language: sharedLanguage
-                });
-                const sharedAttachment = new AttachmentBuilder(sharedImage, { name: `anka-${String(raid.zindanKodu || 'raid').toLowerCase()}-taslak.png` });
-                const sharedContent = `${t(sharedLanguage, 'raid.plan.draft_heading', { raidName: raid.zindan })}${reasonKey ? `\n${t(sharedLanguage, reasonKey)}` : ''}\n\n${warningText(sharedPlan, sharedLanguage)}`;
-                await channel.send({
-                    content: `${leaderLine}\n${sharedContent}`,
-                    files: [sharedAttachment],
-                    components: [planActionRow(messageId, sharedLanguage)],
-                    allowedMentions: raid.creatorId ? { users: [String(raid.creatorId)] } : undefined
-                });
-                sent = true;
-            }
-        } catch (error) {
-            console.error(`Taslak gönderilemedi (${messageId}):`, error.message);
-        }
-    }
-
-    raid.draftSent = sent || raid.draftSent;
-    raid.planNeedsRefresh = false;
-    saveRaid(messageId, raid);
-    return sent;
+    return leaderReview.sendDraft(client, messageId, raid);
 }
 
 async function sendFinalPlan(client, messageId, raid, phase = 'initial') {
     const language = raidLanguage(raid);
     const plan = generatePlan(raid, language);
     const status = t(language, raid.planApproved ? 'raid.table.approved' : 'raid.table.auto');
-    const image = await renderRaidTable(raid, plan, { status, language });
+    const image = await renderRaidTable(raid, plan, { status, language, botUser: client.user });
     const phaseDetails = {
         initial: {
             heading: t(language, 'raid.plan.initial'),
@@ -1300,10 +1355,6 @@ async function schedulerTick(client) {
         for (const [messageId, raid] of raidHafizasi.entries()) {
             normalizeRaid(raid);
             if (!await raidMesajininVarliginiDogrula(client, messageId, raid)) continue;
-
-            if (raid.pendingReserve?.deadline && Date.now() >= raid.pendingReserve.deadline) {
-                await promoteReserve(client, messageId).catch(error => console.error('Yedek yükseltme hatası:', error));
-            }
 
             const secondsUntil = Number(raid.unixZamani || 0) - nowSeconds;
             if (secondsUntil <= 0) {
@@ -1454,11 +1505,13 @@ async function raidManuelOyuncuEkle(interaction) {
     saveRaid(messageId, raid);
     await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
 
-    await sendRegistrationReminder(interaction.client, messageId, raid, user, requestedRole, result.record.role === 'yedek');
-
-    return interaction.editReply(result.overflow
+    const notification = await sendManualRaidAddNotification(interaction.client, messageId, raid, user, result);
+    const reply = result.overflow
         ? t(language, 'raid.manual.overflow', { capacity: raid.capacity, user })
-        : t(language, 'raid.manual.success', { user }));
+        : t(language, 'raid.manual.success', { user });
+    return interaction.editReply(notification === 'failed'
+        ? `${reply}\nOyuncu raid'e başarıyla eklendi ancak özel mesaj gönderilemedi.\n*The player was added successfully, but the direct message could not be delivered.*`
+        : reply);
 }
 
 async function raidDuzenleKomutuYonet(interaction) {
@@ -1804,9 +1857,8 @@ async function handleRegistration(interaction) {
         if (removed.role !== 'yedek') {
             const approval = await requestReserveApproval(interaction.client, messageId, raid, removed.role);
             if (approval.candidate) {
-                return interaction.editReply(approval.autoPromoted
-                    ? t(language, 'raid.leave.promoted', { player: approval.candidate.mention })
-                    : t(language, 'raid.leave.approval_sent', { player: approval.candidate.mention }));
+                return interaction.editReply(t(language, approval.approvalSent
+                    ? 'raid.leave.approval_sent' : 'raid.leave.approval_failed', { player: approval.candidate.mention }));
             }
         }
         return interaction.editReply(t(language, 'raid.leave.success'));
@@ -1824,8 +1876,9 @@ async function handleReserveApproval(interaction) {
         if (!raid || !leaderOwnsRaid(interaction, raid)) return privateReply(interaction, { content: t(language, 'raid.reserve.leader_only') });
 
         if (action === 'accept') {
+            await interaction.deferUpdate();
             const candidate = await promoteReserve(interaction.client, messageId);
-            return interaction.update({ content: candidate ? t(language, 'raid.reserve.promoted', { player: candidate.mention }) : t(language, 'raid.reserve.not_found'), components: [] });
+            return interaction.editReply({ content: candidate ? t(language, 'raid.reserve.promoted', { player: candidate.mention }) : t(language, 'raid.reserve.not_found'), components: [] });
         }
         if (action === 'empty') {
             raid.pendingReserve = null;
@@ -1849,8 +1902,9 @@ async function handleReserveApproval(interaction) {
         const messageId = interaction.customId.split('_')[3];
         const raid = raidHafizasi.get(String(messageId));
         if (!raid || !leaderOwnsRaid(interaction, raid)) return privateReply(interaction, { content: t(language, 'common.no_permission') });
+        await interaction.deferUpdate();
         const candidate = await promoteReserve(interaction.client, messageId, interaction.values[0]);
-        return interaction.update({ content: candidate ? t(language, 'raid.reserve.promoted', { player: candidate.mention }) : t(language, 'raid.reserve.not_found'), components: [] });
+        return interaction.editReply({ content: candidate ? t(language, 'raid.reserve.promoted', { player: candidate.mention }) : t(language, 'raid.reserve.not_found'), components: [] });
     }
     return null;
 }
@@ -1918,37 +1972,8 @@ async function handleAttendanceInteraction(interaction) {
 }
 
 async function handlePlanInteraction(interaction) {
-    if (interaction.isButton() && interaction.customId.startsWith('raid_plan_')) {
-        const language = interactionLanguage(interaction);
-        const parts = interaction.customId.split('_');
-        const action = parts[2];
-        const messageId = parts[3];
-        const raid = raidHafizasi.get(String(messageId));
-        if (!raid || !leaderOwnsRaid(interaction, raid)) return privateReply(interaction, { content: t(language, 'raid.plan.leader_only') });
-
-        if (action === 'approve') {
-            raid.planApproved = true;
-            saveRaid(messageId, raid);
-            return interaction.update({ content: t(language, 'raid.plan.approved', { raidName: raid.zindan }), components: [] });
-        }
-        if (action === 'recalc') {
-            raid.planOverrides = {};
-            raid.planApproved = false;
-            raid.planNeedsRefresh = true;
-            saveRaid(messageId, raid);
-            await interaction.update({ content: t(language, 'raid.plan.recalculated'), components: [] });
-            await sendDraft(interaction.client, messageId, raid, 'raid.plan.reason_recalculated');
-            return;
-        }
-        if (action === 'edit') {
-            const players = mainParticipants(raid);
-            if (!players.length) return privateReply(interaction, { content: t(language, 'raid.plan.no_players') });
-            return privateReply(interaction, {
-                content: t(language, 'raid.plan.choose_player'),
-                components: [new ActionRowBuilder().addComponents(planPlayerMenu(messageId, raid, language))]
-            });
-        }
-    }
+    const reviewHandled = await leaderReview.handle(interaction);
+    if (reviewHandled !== null) return reviewHandled;
 
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('raid_plan_player_')) {
         const language = interactionLanguage(interaction);
@@ -1978,23 +2003,6 @@ async function handlePlanInteraction(interaction) {
         });
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('raid_plan_value_')) {
-        const language = interactionLanguage(interaction);
-        const parts = interaction.customId.split('_');
-        const messageId = parts[3];
-        const userId = parts[4];
-        const category = parts[5];
-        const raid = raidHafizasi.get(String(messageId));
-        if (!raid || !leaderOwnsRaid(interaction, raid)) return privateReply(interaction, { content: t(language, 'common.no_permission') });
-        if (!raid.planOverrides[userId]) raid.planOverrides[userId] = {};
-        raid.planOverrides[userId][category] = interaction.values[0] === NONE_VALUE ? null : interaction.values[0];
-        raid.planApproved = false;
-        raid.planNeedsRefresh = true;
-        saveRaid(messageId, raid);
-        await interaction.update({ content: t(language, 'raid.plan.saved'), components: [] });
-        await sendDraft(interaction.client, messageId, raid, 'raid.plan.reason_manual');
-        return;
-    }
     return null;
 }
 
@@ -2037,6 +2045,8 @@ module.exports = {
     getAllRaids,
     buildRaidMessagePayload,
     _test: {
+        buildManualRaidAddEmbed,
+        sendManualRaidAddNotification,
         normalizeRaid,
         registerParticipant,
         isRaidClosed,

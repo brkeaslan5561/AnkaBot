@@ -93,3 +93,41 @@ test('trialde iki Black Death Scorpion atanabilir', () => {
     assert.equal(plan.rows[2].companion, 'Minsc');
 });
 
+test('Pack Tactics sahibi her tank önceliklidir; healer ve eski manuel atamalar tank aurasını silemez', () => {
+    const players = [
+        player(1, 'heal', { auras: ['Pack Tactics', 'Mystic Aura'] }),
+        player(2, 'tank', { auras: ['pack_tactics', 'Runic Aura'] }),
+        player(3, 'heal', { auras: ['Pack Tactics', 'Runic Aura'] }),
+        player(4, 'tank', { auras: ['PACK TACTICS', 'Mystic Aura'] })
+    ];
+    const before = structuredClone(players);
+    for (const overrides of [null, { '2': { aura: null }, '4': { aura: 'Mystic Aura' } }, { '1': { aura: 'Pack Tactics' }, '3': { aura: 'Pack Tactics' } }]) {
+        const plan = assignRaid({ contentType: 'trial', capacity: 10 }, players, overrides);
+        assert.equal(plan.rows.find(row => row.userId === '2').aura, 'Pack Tactics');
+        assert.equal(plan.rows.find(row => row.userId === '4').aura, 'Pack Tactics');
+        assert.equal(plan.rows.find(row => row.userId === '1').aura, 'Mystic Aura');
+        assert.equal(plan.rows.find(row => row.userId === '3').aura, 'Runic Aura');
+        assert.equal(plan.rows.filter(row => row.aura === 'Pack Tactics').length, 2);
+    }
+    assert.deepEqual(players, before);
+});
+
+test('Pack Tactics envanterde yoksa tanka verilmez; boş Pack hakkı healera kalabilir', () => {
+    const plan = planFor('trial', [
+        player(1, 'tank', { auras: [] }),
+        player(2, 'tank', { auras: ['Pack Tactics'] }),
+        player(3, 'heal', { auras: ['Pack Tactics'] })
+    ]);
+    assert.equal(plan.rows[0].aura, null);
+    assert.equal(plan.rows[1].aura, 'Pack Tactics');
+    assert.equal(plan.rows[2].aura, 'Pack Tactics');
+});
+
+test('standart dışı dungeon kadrosunda da Pack Tactics sahibi iki tank korunur', () => {
+    const plan = planFor('dungeon', [
+        player(1, 'tank', { auras: ['Pack Tactics'] }),
+        player(2, 'tank', { auras: ['Pack Tactics'] }),
+        player(3, 'heal', { auras: ['Mystic Aura'] })
+    ]);
+    assert.deepEqual(plan.rows.map(row => row.aura), ['Pack Tactics', 'Pack Tactics', 'Mystic Aura']);
+});
