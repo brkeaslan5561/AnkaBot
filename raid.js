@@ -17,6 +17,9 @@ const { selectOptions, findCatalogItem } = require('./raid_catalog');
 const { assignRaid, inventoryOf } = require('./raid_assignment');
 const { renderRaidTable } = require('./raid_table');
 const { createLeaderReview } = require('./raid_leader');
+const { createRaidCreation } = require('./raid_creation');
+const { createTimePreferences, organizerTime, resolveRaidTimeEdit } = require('./raid_time');
+const { sendEmojiSafe, emojiSafeInteraction } = require('./raid_emojis');
 const {
     t,
     getGuildLanguage,
@@ -25,7 +28,6 @@ const {
     formatDiscordTimestamp
 } = require('./localization');
 
-const ISTANBUL_UTC_OFFSET_HOURS = 3;
 const RAID_DATA_DOSYASI = path.join(__dirname, 'raid_data.json');
 const PROFIL_DATA_DOSYASI = path.join(__dirname, 'raid_profiles.json');
 const KATILIM_DATA_DOSYASI = path.join(__dirname, 'raid_attendance.json');
@@ -36,7 +38,6 @@ const CHECKPOINT_BEFORE_SECONDS = 5 * 60;
 const ATTENDANCE_GRACE_SECONDS = 15 * 60;
 
 const raidHafizasi = new Map();
-const raidKurulumHafizasi = new Map();
 const profilSecimHafizasi = new Map();
 const dogrulanmisRaidMesajlari = new Map();
 let profilVerisi = { profiles: {} };
@@ -99,13 +100,6 @@ const ayListesi = [
     { label: 'Temmuz', value: '6' }, { label: 'Ağustos', value: '7' }, { label: 'Eylül', value: '8' },
     { label: 'Ekim', value: '9' }, { label: 'Kasım', value: '10' }, { label: 'Aralık', value: '11' }
 ];
-const saatListesi = [
-    { label: '20:00', value: '20:00' }, { label: '20:15', value: '20:15' }, { label: '20:30', value: '20:30' },
-    { label: '21:00', value: '21:00' }, { label: '21:15', value: '21:15' }, { label: '21:30', value: '21:30' },
-    { label: '22:00', value: '22:00' }, { label: '22:15', value: '22:15' }, { label: '22:30', value: '22:30' },
-    { label: '23:00', value: '23:00' }, { label: '23:15', value: '23:15' }, { label: '23:30', value: '23:30' }
-];
-
 const raidKomutu = new SlashCommandBuilder()
     .setName('raid-oluştur')
     .setNameLocalizations({ 'en-US': 'create-raid', 'en-GB': 'create-raid' })
@@ -136,7 +130,12 @@ const raidDuzenleKomutu = new SlashCommandBuilder()
     .addIntegerOption(option => option.setName('gun').setNameLocalizations({ 'en-US': 'day', 'en-GB': 'day' }).setDescription('Yeni gün').setDescriptionLocalizations({ 'en-US': 'New day', 'en-GB': 'New day' }).setMinValue(1).setMaxValue(31).setRequired(false))
     .addIntegerOption(option => option.setName('ay').setNameLocalizations({ 'en-US': 'month', 'en-GB': 'month' }).setDescription('Yeni ay').setDescriptionLocalizations({ 'en-US': 'New month', 'en-GB': 'New month' }).setMinValue(1).setMaxValue(12).setRequired(false))
     .addStringOption(option => option.setName('saat').setNameLocalizations({ 'en-US': 'time', 'en-GB': 'time' }).setDescription('Yeni saat, örn. 21:30').setDescriptionLocalizations({ 'en-US': 'New time, e.g. 21:30', 'en-GB': 'New time, e.g. 21:30' }).setRequired(false))
-    .addStringOption(option => option.setName('aciklama').setNameLocalizations({ 'en-US': 'description', 'en-GB': 'description' }).setDescription('Yeni açıklama').setDescriptionLocalizations({ 'en-US': 'New description', 'en-GB': 'New description' }).setRequired(false));
+    .addStringOption(option => option.setName('aciklama').setNameLocalizations({ 'en-US': 'description', 'en-GB': 'description' }).setDescription('Yeni açıklama').setDescriptionLocalizations({ 'en-US': 'New description', 'en-GB': 'New description' }).setRequired(false))
+    .addIntegerOption(option => option.setName('yil').setNameLocalizations({ 'en-US': 'year', 'en-GB': 'year' }).setDescription('Yeni yıl / New year').setMinValue(2000).setMaxValue(2100))
+    .addStringOption(option => option.setName('saat-dilimi').setNameLocalizations({ 'en-US': 'time-zone', 'en-GB': 'time-zone' }).setDescription('IANA saat dilimi / IANA time zone (Europe/Istanbul)'))
+    .addStringOption(option => option.setName('tekrar-saati').setNameLocalizations({ 'en-US': 'repeated-time', 'en-GB': 'repeated-time' }).setDescription('Tekrarlanan yerel saat / Repeated local time').addChoices(
+        { name: 'İlk / Earlier', value: 'earlier' }, { name: 'İkinci / Later', value: 'later' }
+    ));
 
 function interactionLanguage(interaction) {
     return languageForInteraction(interaction);
@@ -173,38 +172,8 @@ function safeJsonRead(filePath, fallback) {
     }
 }
 
-function currentIstanbulYear() {
-    const shifted = new Date(Date.now() + ISTANBUL_UTC_OFFSET_HOURS * 60 * 60 * 1000);
-    return shifted.getUTCFullYear();
-}
-
-function istanbulZamaniOlustur(gun, ay, saat, explicitYear = null, ensureFuture = true) {
-    const [hour, minute] = String(saat).split(':').map(Number);
-    let year = explicitYear || currentIstanbulYear();
-    let timestamp = Math.floor(Date.UTC(year, Number(ay), Number(gun), hour - ISTANBUL_UTC_OFFSET_HOURS, minute) / 1000);
-    if (!explicitYear && ensureFuture && timestamp <= Math.floor(Date.now() / 1000)) {
-        year += 1;
-        timestamp = Math.floor(Date.UTC(year, Number(ay), Number(gun), hour - ISTANBUL_UTC_OFFSET_HOURS, minute) / 1000);
-    }
-    return { timestamp, year };
-}
-
-function istanbulParcalariAl(unixZamani) {
-    const date = new Date((Number(unixZamani) + ISTANBUL_UTC_OFFSET_HOURS * 60 * 60) * 1000);
-    return {
-        gun: date.getUTCDate(),
-        ay: date.getUTCMonth(),
-        yil: date.getUTCFullYear(),
-        saat: `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
-    };
-}
-
 function discordTarihMetniOlustur(unixZamani) {
     return `${formatDiscordTimestamp(unixZamani, 'F')} (${formatDiscordTimestamp(unixZamani, 'R')})`;
-}
-
-function saatFormatiniKontrolEt(saat) {
-    return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(saat));
 }
 
 function contentTypeFromValue(value) {
@@ -523,11 +492,13 @@ function raidEmbedOlustur(raid, language = raidLanguage(raid)) {
     const description = String(raid.aciklama ?? [raid.descriptions?.tr, raid.descriptions?.en].filter(Boolean).join('\n'))
         .split('\n').filter(line => !emptyDescriptions.has(line.trim())).join('\n').trim();
     const descriptionLine = description ? `\n\n<:zaciklama:1527641028171923537> **AÇIKLAMA / DESCRIPTION:**\n ${description}` : '';
+    const organizer = organizerTime(raid);
+    const timeLine = organizer ? `**Raid Liderinin Saati** / *Organizer Time*\n${organizer}\n\n**Yerel Saatiniz** / *Your Local Time*\n${discordTarihMetniOlustur(raid.unixZamani)}` : raid.tarih;
 
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
-        .setDescription(`## ${linkedTitle}\n\n**${typeLabel}**\n**PLAYERS:** ${joined}/${raid.capacity} • **RESERVE:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **TARİH / DATE:**\n ${raid.tarih}${descriptionLine}${statusLine}`)
+        .setDescription(`## ${linkedTitle}\n\n**${typeLabel}**\n**PLAYERS:** ${joined}/${raid.capacity} • **RESERVE:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **TARİH / DATE:**\n ${timeLine}${descriptionLine}${statusLine}`)
         .addFields(
             { name: `<:ztank:1527640905073295440> ${roleLabel(language, 'tank')} (${raid.tanklar.length})`, value: listText(raid.tanklar, false, language), inline: true },
             { name: `<:zhealer:1527640985520312440> ${roleLabel(language, 'heal')} (${raid.healerlar.length})`, value: listText(raid.healerlar, false, language), inline: true },
@@ -638,7 +609,7 @@ async function updateRaidCard(client, messageId, raid, fallbackChannelId = null)
         const message = await fetchRaidMessage(client, messageId, raid, fallbackChannelId);
         const language = raidLanguage(raid);
         const closed = isRaidClosed(raid);
-        await message.edit({ embeds: [raidEmbedOlustur(raid, language)], components: [raidButtonRow(closed, language)] });
+        await sendEmojiSafe(message, 'edit', { embeds: [raidEmbedOlustur(raid, language)], components: [raidButtonRow(closed, language)] }, { client, channel: message.channel });
         return message;
     } catch (error) {
         console.error(`Raid kartı güncellenemedi (${messageId}):`, error.message);
@@ -1037,20 +1008,32 @@ async function sendAttendancePrompt(client, messageId, raid) {
     return sent;
 }
 
+function buildAbsenceWarningEmbed(client, player, raid, result) {
+    const consequence = language => {
+        if (result.penaltyTriggered) {
+            return t(language, 'raid.attendance.penalty_triggered', {
+                extra: result.pendingPenalties > 1 ? `\n${language === 'tr' ? 'Toplam bekleyen raid cezanız' : 'Total pending raid penalties'}: **${result.pendingPenalties}**` : ''
+            });
+        }
+        return t(language, 'raid.attendance.penalty_pending', { strikes: result.strikeCount, remaining: 3 - result.strikeCount });
+    };
+    // Existing consequence wording and counters are preserved; only formatting changes.
+    const tr = consequence('tr').replace(/\*\*/g, '').slice(0, 480);
+    const en = consequence('en').replace(/\*\*/g, '').slice(0, 480);
+    return buildRaidNotificationEmbed(client, raid, player, 'absence')
+        .setTitle('Raid Katılım Uyarısı')
+        .setDescription('*Raid Attendance Warning*\n\n**Kayıtlı olduğunuz bu etkinlikte raid lideri tarafından gelmedi olarak işaretlendiniz.**\n*The raid leader marked you as absent from this event after you signed up.*')
+        .addFields(
+            { name: '\u200b', value: `**Durum** / Status\n**${tr}**\n*${en}*` },
+            { name: '\u200b', value: `**Toplam Devamsızlık** / Total Absences\n${String(result.totalAbsences ?? '—').slice(0, 60)}` },
+            { name: '\u200b', value: '**Beklenmedik durumlar yaşanabileceğini anlıyoruz. Raid kadrosunu güvenilir şekilde oluşturabilmek için katılımı takip ediyoruz.**\n*We understand that unexpected situations can occur. We track attendance to organize the raid roster reliably.*' }
+        );
+}
+
 async function sendAbsenceWarning(client, player, raid, result) {
     try {
         const user = await client.users.fetch(player.userId);
-        const language = languageForUser(player.userId, { guildId: raid.guildId });
-        let consequence;
-        if (result.penaltyTriggered) {
-            consequence = t(language, 'raid.attendance.penalty_triggered', {
-                extra: result.pendingPenalties > 1 ? `\n${language === 'tr' ? 'Toplam bekleyen raid cezanız' : 'Total pending raid penalties'}: **${result.pendingPenalties}**` : ''
-            });
-        } else {
-            const remaining = 3 - result.strikeCount;
-            consequence = t(language, 'raid.attendance.penalty_pending', { strikes: result.strikeCount, remaining });
-        }
-        await user.send(`${t(language, 'raid.attendance.warning_title')}\n\n${t(language, 'raid.attendance.warning_body', { raidName: raid.zindan, raidDate: raid.tarih, consequence, total: result.totalAbsences })}`);
+        await user.send({ embeds: [buildAbsenceWarningEmbed(client, player, raid, result)] });
     } catch (error) {
         console.warn(`Absence warning DM failed (${player.userId}):`, error.message);
     }
@@ -1085,41 +1068,67 @@ async function finalizeAttendance(client, messageId, raid, absentUserIds = []) {
     return { alreadyCompleted: false, absent, present, absenceResults };
 }
 
-function buildManualRaidAddEmbed(client, messageId, raid, player) {
+function buildRaidNotificationEmbed(client, raid, player, variant = 'signup') {
+    const manual = variant === true || variant === 'manual';
     const timestamp = Number(raid.unixZamani);
     const date = new Date(timestamp * 1000);
     const hasDate = timestamp > 0 && Number.isFinite(date.getTime());
-    const dateText = hasDate
-        ? date.toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', year: 'numeric' })
-        : '—';
-    const timeText = hasDate
-        ? `${date.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hour12: false })} (TR)`
-        : '—';
+    // unixZamani already represents the organizer's raid time as an instant.
+    // Discord localizes timestamps for each reader; no second UTC+3 conversion.
+    const dateText = hasDate ? formatDiscordTimestamp(timestamp, 'D') : '—';
+    const timeText = hasDate ? formatDiscordTimestamp(timestamp, 't') : '—';
     const role = ['tank', 'heal', 'dps', 'yedek'].includes(player.role) ? player.role : null;
     const roleTr = role ? roleLabel('tr', role) : '—';
     const roleEn = role ? roleLabel('en', role) : '—';
+    // Field names are always bold in Discord. Put bilingual labels in values
+    // so only the Turkish label is bold and the actual information is regular.
+    const field = (tr, en, value, inline = true) => ({
+        name: '\u200b', value: `**${tr}**${en ? ` / ${en}` : ''}\n${value}`.slice(0, 1024), inline
+    });
+    const spacer = { name: '\u200b', value: '\u200b', inline: true };
     const embed = new EmbedBuilder()
         .setColor('#E58A3B')
-        .setTitle("Raid'e Eklendiniz!")
-        .setDescription('*You Have Been Added to a Raid!*\n\nBir raid lideri tarafından aşağıdaki organizasyona manuel olarak eklendiniz.\n*You have been manually added to the following raid by a raid leader.*')
+        .setTitle(manual ? "Raid'e Eklendiniz!" : 'Kayıt Başarılı')
+        .setDescription(manual
+            ? '*You Have Been Added to a Raid!*\n\n**Bir raid lideri tarafından aşağıdaki organizasyona manuel olarak eklendiniz.**\n*You have been manually added to the following raid by a raid leader.*'
+            : '*Signup Confirmed*\n\n**Aşağıdaki organizasyona kaydınız alındı.**\n*Your signup for the following raid has been confirmed.*')
         .addFields(
-            { name: 'Raid', value: String(raid.zindan || raid.zindanKodu || '—').slice(0, 1024), inline: true },
-            { name: 'Rol / Role', value: roleTr === roleEn ? roleTr : `${roleTr}\n*${roleEn}*`, inline: true },
-            { name: '\u200b', value: '\u200b', inline: true },
-            { name: 'Tarih / Date', value: dateText, inline: true },
-            { name: 'Saat / Time', value: timeText, inline: true },
-            { name: '\u200b', value: '\u200b', inline: true },
-            { name: '\u200b', value: 'Lütfen raid saatinde hazır olun.\n*Please be ready at the scheduled raid time.*' }
+            field('Raid', null, String(raid.zindan || raid.zindanKodu || '—')),
+            field('Rol', 'Role', roleTr === roleEn ? roleTr : `${roleTr}\n*${roleEn}*`),
+            spacer,
+            field('Tarih', 'Date', dateText),
+            field('Saat', 'Time', timeText),
+            spacer
         );
-    // Use only IDs stored with the original raid; never substitute the command's channel.
-    if ([raid.guildId, raid.channelId, messageId].every(id => /^\d{17,20}$/.test(String(id || '')))) {
-        embed.addFields({ name: '\u200b', value: `[Raid'e Git / View Raid](https://discord.com/channels/${raid.guildId}/${raid.channelId}/${messageId})` });
+    if (manual) {
+        embed.addFields({ name: '\u200b', value: '**Lütfen raid saatinde hazır olun.**\n*Please be ready at the scheduled raid time.*' });
+    } else if (variant !== 'absence') {
+        embed.addFields(
+            field('Kalan', 'Time Left', hasDate ? formatDiscordTimestamp(timestamp, 'R') : '—', false),
+            { name: '\u200b', value: '⚠️ **15 dakika önce hazır olun.**\n*Please be ready 15 minutes early.*\n\n⚠️ **Katılmayan oyuncular yoklamada işaretlenebilir.**\n*No-shows may be marked absent.*' }
+        );
     }
+    const organizer = organizerTime(raid);
+    if (organizer) embed.addFields({ name: '\u200b', value: `**Raid Liderinin Saati** / *Organizer Time*\n${organizer}` });
     const avatar = client.user?.displayAvatarURL?.({ extension: 'png', size: 128, forceStatic: true });
     return embed.setFooter({ text: 'AnkaBot • Raid Notification', ...(avatar ? { iconURL: avatar } : {}) });
 }
 
-async function sendManualRaidAddNotification(client, messageId, raid, user, registration) {
+function buildManualRaidAddEmbed(client, messageId, raid, player) {
+    return buildRaidNotificationEmbed(client, raid, player, true);
+}
+
+function manualRaidLinkRow(messageId, raidMessage) {
+    // The fetched Discord Message is authoritative, even for legacy records
+    // whose stored guild/channel IDs no longer match the actual message.
+    const url = raidMessage?.url;
+    const match = typeof url === 'string' && url.match(/^https:\/\/discord\.com\/channels\/(\d{17,20})\/(\d{17,20})\/(\d{17,20})$/);
+    if (!match || match[3] !== String(messageId) || String(raidMessage.id) !== String(messageId)) return null;
+    return new ActionRowBuilder().addComponents(new ButtonBuilder()
+        .setStyle(ButtonStyle.Link).setLabel("Raid'e Git / View Raid").setURL(url));
+}
+
+async function sendManualRaidAddNotification(client, messageId, raid, user, registration, raidMessage = null) {
     // Called only after saveRaid succeeds. Existing records (including reserves) are updates.
     if (registration.existing || !/^\d{17,20}$/.test(String(user?.id || ''))
         || String(registration.record?.userId) !== String(user.id) || user.bot || typeof user.send !== 'function') {
@@ -1127,7 +1136,8 @@ async function sendManualRaidAddNotification(client, messageId, raid, user, regi
     }
     try {
         const embed = buildManualRaidAddEmbed(client, messageId, raid, registration.record);
-        await user.send({ embeds: [embed] });
+        const linkRow = manualRaidLinkRow(messageId, raidMessage);
+        await user.send({ embeds: [embed], ...(linkRow ? { components: [linkRow] } : {}) });
         return 'sent';
     } catch (error) {
         const permanent = [50007, 50013, 10013].includes(Number(error.code));
@@ -1144,36 +1154,8 @@ async function sendRegistrationReminder(client, messageId, raid, user, role, isR
     const userId = String(user.id);
     if (raid.registrationReminderSentUsers.includes(userId)) return false;
     try {
-        const timestamp = Number(raid.unixZamani);
-        const date = new Date(timestamp * 1000);
-        const hasDate = timestamp > 0 && Number.isFinite(date.getTime());
-        // Explicit timezone keeps the displayed raid time independent of the host/client timezone.
-        const dateText = hasDate
-            ? date.toLocaleDateString('tr-TR', { timeZone: 'Europe/Istanbul', day: 'numeric', month: 'long', year: 'numeric' })
-            : String(raid.tarih || '—').slice(0, 1000);
-        const timeText = hasDate
-            ? date.toLocaleTimeString('tr-TR', { timeZone: 'Europe/Istanbul', hour: '2-digit', minute: '2-digit', hour12: false })
-            : '—';
         const selectedRole = isReserve ? 'yedek' : role;
-        const roleTr = roleLabel('tr', selectedRole);
-        const roleEn = roleLabel('en', selectedRole);
-        const roleText = roleTr === roleEn ? roleTr : `${roleTr}\n${roleEn}`;
-        const embed = new EmbedBuilder()
-            .setColor('#36C994')
-            .setTitle('✅ Kayıt Başarılı / Signup Confirmed')
-            .setDescription(`ANKA RAID BOT\n\n**${String(raid.zindan || '—').slice(0, 1000)}**`)
-            .addFields(
-                { name: 'Tarih / Date', value: `**${dateText}**`, inline: true },
-                { name: 'Saat / Time', value: `**${timeText}** (TSİ / TRT)`, inline: true },
-                // Discord fits up to three inline fields per row; leave the third column empty.
-                { name: '\u200b', value: '\u200b', inline: true },
-                { name: 'Rol / Role', value: `**${roleText.slice(0, 1000)}**`, inline: true },
-                { name: 'Kalan / Remaining', value: hasDate ? `**${formatDiscordTimestamp(timestamp, 'R')}**` : '—', inline: true },
-                { name: '\u200b', value: '\u200b', inline: true },
-                { name: '⚠️ 15 dakika önce hazır olun.', value: 'Please be ready 15 minutes early.' },
-                { name: '⚠️ Katılmayan oyuncular yoklamada işaretlenebilir.', value: 'No-shows may be marked absent.' }
-            )
-            .setFooter({ text: 'Ashes of Anka • Raid Management' });
+        const embed = buildRaidNotificationEmbed(client, raid, { role: selectedRole });
         await user.send({ embeds: [embed] });
         raid.registrationReminderSentUsers.push(userId);
         raid.registrationReminderSentUsers = raid.registrationReminderSentUsers.slice(-100);
@@ -1503,9 +1485,9 @@ async function raidManuelOyuncuEkle(interaction) {
     const displayName = member?.displayName || user.globalName || user.username;
     const result = registerParticipant(raid, user, displayName, requestedRole, className, inventory);
     saveRaid(messageId, raid);
-    await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
+    const raidMessage = await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
 
-    const notification = await sendManualRaidAddNotification(interaction.client, messageId, raid, user, result);
+    const notification = await sendManualRaidAddNotification(interaction.client, messageId, raid, user, result, raidMessage);
     const reply = result.overflow
         ? t(language, 'raid.manual.overflow', { capacity: raid.capacity, user })
         : t(language, 'raid.manual.success', { user });
@@ -1520,29 +1502,33 @@ async function raidDuzenleKomutuYonet(interaction) {
     const messageId = interaction.options.getString('id');
     const raid = raidHafizasi.get(String(messageId));
     if (!raid) return interaction.editReply(t(language, 'raid.manual.not_found'));
+    if (raid.guildId && String(raid.guildId) !== String(interaction.guildId)) return interaction.editReply(t(language, 'common.no_permission'));
+    if (!leaderOwnsRaid(interaction, raid) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return interaction.editReply(t(language, 'common.no_permission'));
 
     const newDay = interaction.options.getInteger('gun');
     const newMonth = interaction.options.getInteger('ay');
     const newTime = interaction.options.getString('saat');
     const newDescription = interaction.options.getString('aciklama');
-    const dateChanges = newDay !== null || newMonth !== null || newTime !== null;
+    const newYear = interaction.options.getInteger('yil');
+    const newZone = interaction.options.getString('saat-dilimi');
+    const fold = interaction.options.getString('tekrar-saati');
+    const dateChanges = newDay !== null || newMonth !== null || newTime !== null || newYear !== null || newZone !== null || fold !== null;
     if (!dateChanges && newDescription === null) return interaction.editReply(t(language, 'raid.edit.no_fields'));
-    if (newTime !== null && !saatFormatiniKontrolEt(newTime)) return interaction.editReply(t(language, 'raid.edit.time_format'));
-
     if (dateChanges) {
-        const day = newDay !== null ? newDay : Number(raid.gun);
-        const month = newMonth !== null ? newMonth - 1 : Number(raid.ay);
-        const time = newTime !== null ? newTime : raid.saat;
-        if (!day || Number.isNaN(month) || !time) return interaction.editReply(t(language, 'raid.edit.legacy_date'));
-        const created = istanbulZamaniOlustur(day, month, time, null, true);
-        const check = istanbulParcalariAl(created.timestamp);
-        if (check.gun !== day || check.ay !== month || check.saat !== time) return interaction.editReply(t(language, 'raid.edit.invalid_date'));
-        raid.gun = String(day);
-        raid.ay = String(month);
-        raid.saat = time;
-        raid.yil = created.year;
-        raid.unixZamani = created.timestamp;
-        raid.tarih = discordTarihMetniOlustur(created.timestamp);
+        let snapshot;
+        try {
+            snapshot = resolveRaidTimeEdit(raid, { day: newDay, month: newMonth, time: newTime, year: newYear, zone: newZone, fold });
+        } catch (error) {
+            const explanations = {
+                unknownZone: 'Eski raidin saat dilimi bilinmiyor; saat-dilimi alanını belirtin. / The legacy raid has no known time zone; specify time-zone.',
+                gap: 'Bu yerel saat mevcut değil. / This local time does not exist.',
+                fold: 'Bu saat iki kez yaşanıyor; tekrar-saati seçin. / This time occurs twice; choose repeated-time.',
+                past: 'Başlangıç gelecekte olmalı. / Start time must be in the future.'
+            };
+            return interaction.editReply(explanations[error.message] || 'Tarih, saat veya IANA saat dilimi geçersiz. / Invalid date, time or IANA time zone.');
+        }
+        Object.assign(raid, snapshot);
+        raid.tarih = discordTarihMetniOlustur(raid.unixZamani);
         raid.kapandi = false;
         raid.draftSent = false;
         raid.finalSent = false;
@@ -1564,161 +1550,31 @@ async function raidDuzenleKomutuYonet(interaction) {
     return interaction.editReply(t(language, 'raid.edit.success', { raidName: raid.zindan }));
 }
 
-async function handleRaidCreation(interaction) {
-    if (interaction.isChatInputCommand() && interaction.commandName === 'raid-oluştur') {
-        const language = interactionLanguage(interaction);
-        const contentOptions = zindanListesi.map(item => item.value === 'custom' ? {
-            ...item,
-            label: t(language, 'raid.creation.custom'),
-            description: t(language, 'raid.creation.custom_description')
-        } : {
-            ...item,
-            description: t(language, item.contentType === 'dungeon' ? 'raid.creation.dungeon_description' : 'raid.creation.trial_description')
-        });
-        const menu = new StringSelectMenuBuilder()
-            .setCustomId('raid_content_select')
-            .setPlaceholder(t(language, 'raid.creation.content_placeholder'))
-            .addOptions(contentOptions);
-        return privateReply(interaction, {
-            content: t(language, 'raid.creation.choose_content'),
-            components: [new ActionRowBuilder().addComponents(menu)]
-        });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === 'raid_content_select') {
-        const language = interactionLanguage(interaction);
-        const selected = interaction.values[0];
-        if (selected === 'custom') {
-            raidKurulumHafizasi.set(interaction.user.id, { gun: null, ay: null, saat: null });
-            const typeMenu = new StringSelectMenuBuilder()
-                .setCustomId('raid_custom_type')
-                .setPlaceholder(t(language, 'raid.creation.custom_type_placeholder'))
-                .addOptions(
-                    { label: t(language, 'raid.type.dungeon'), value: 'dungeon', description: t(language, 'raid.creation.dungeon_description') },
-                    { label: t(language, 'raid.type.trial'), value: 'trial', description: t(language, 'raid.creation.trial_description') }
-                );
-            return interaction.update({ content: t(language, 'raid.creation.custom_type_prompt'), components: [new ActionRowBuilder().addComponents(typeMenu)] });
-        }
-
-        const item = zindanListesi.find(entry => entry.value === selected);
-        raidKurulumHafizasi.set(interaction.user.id, {
-            zindanKodu: item.value,
-            zindan: item.label,
-            contentType: item.contentType,
-            gun: null,
-            ay: null,
-            saat: null
-        });
-        return interaction.update({ content: t(language, 'raid.creation.choose_date', { raidName: item.label }), components: dateComponents({}, language) });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === 'raid_custom_type') {
-        const session = raidKurulumHafizasi.get(interaction.user.id) || {};
-        const language = interactionLanguage(interaction);
-        session.contentType = interaction.values[0];
-        raidKurulumHafizasi.set(interaction.user.id, session);
-        const modal = new ModalBuilder().setCustomId('raid_custom_name_modal').setTitle(t(language, 'raid.creation.custom_modal_title'));
-        const input = new TextInputBuilder()
-            .setCustomId('raid_custom_name')
-            .setLabel(t(language, 'raid.creation.custom_name_label'))
-            .setStyle(TextInputStyle.Short)
-            .setMaxLength(80)
-            .setRequired(true);
-        modal.addComponents(new ActionRowBuilder().addComponents(input));
-        return interaction.showModal(modal);
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId === 'raid_custom_name_modal') {
-        const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = interactionLanguage(interaction);
-        if (!session) return privateReply(interaction, { content: t(language, 'common.expired') });
-        const name = interaction.fields.getTextInputValue('raid_custom_name').trim();
-        session.zindanKodu = name;
-        session.zindan = name;
-        raidKurulumHafizasi.set(interaction.user.id, session);
-        return interaction.update({ content: t(language, 'raid.creation.choose_date', { raidName: name }), components: dateComponents(session, language) });
-    }
-
-    if (interaction.isStringSelectMenu() && (interaction.customId.startsWith('raid_date_day_') || interaction.customId === 'raid_date_month')) {
-        const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = interactionLanguage(interaction);
-        if (!session) return privateReply(interaction, { content: t(language, 'common.expired') });
-        if (interaction.customId.startsWith('raid_date_day_')) session.gun = interaction.values[0];
-        else session.ay = interaction.values[0];
-        raidKurulumHafizasi.set(interaction.user.id, session);
-
-        if (session.gun && session.ay !== null && session.ay !== undefined) {
-            const timeMenu = new StringSelectMenuBuilder().setCustomId('raid_date_time').setPlaceholder(t(language, 'raid.creation.time_placeholder')).addOptions(saatListesi);
-            const month = monthOptions(language).find(item => item.value === session.ay)?.label;
-            return interaction.update({
-                content: t(language, 'raid.creation.choose_time', { day: session.gun, month }),
-                components: [new ActionRowBuilder().addComponents(timeMenu)]
-            });
-        }
-        return interaction.update({ content: t(language, 'raid.creation.choose_both'), components: dateComponents(session, language) });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === 'raid_date_time') {
-        const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = interactionLanguage(interaction);
-        if (!session) return privateReply(interaction, { content: t(language, 'common.expired') });
-        session.saat = interaction.values[0];
-        raidKurulumHafizasi.set(interaction.user.id, session);
-        const modal = new ModalBuilder().setCustomId('raid_description_modal').setTitle(t(language, 'raid.creation.description_title'));
-        const input = new TextInputBuilder()
-            .setCustomId('raid_description')
-            .setLabel(t(language, 'raid.creation.description_label'))
-            .setStyle(TextInputStyle.Paragraph)
-            .setMaxLength(500)
-            .setRequired(false);
-        modal.addComponents(new ActionRowBuilder().addComponents(input));
-        return interaction.showModal(modal);
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId === 'raid_description_modal') {
-        await interaction.deferUpdate();
-        const session = raidKurulumHafizasi.get(interaction.user.id);
-        const language = interactionLanguage(interaction);
-        if (!session) return interaction.editReply({ content: t(language, 'common.expired'), components: [] });
-        const description = interaction.fields.getTextInputValue('raid_description').trim();
-        const created = istanbulZamaniOlustur(session.gun, session.ay, session.saat, null, true);
-        const checked = istanbulParcalariAl(created.timestamp);
-        if (checked.gun !== Number(session.gun) || checked.ay !== Number(session.ay) || checked.saat !== session.saat) {
-            return interaction.editReply({ content: t(language, 'raid.creation.invalid_date'), components: [] });
-        }
+const raidCreation = createRaidCreation({
+    contents: zindanListesi,
+    preferences: createTimePreferences(),
+    publish: async (interaction, data, session) => {
         const raid = normalizeRaid({
-            zindanKodu: session.zindanKodu,
-            zindan: session.zindan,
-            contentType: session.contentType,
-            capacity: capacityForType(session.contentType),
-            tarih: discordTarihMetniOlustur(created.timestamp),
-            aciklama: description,
-            gun: String(session.gun),
-            ay: String(session.ay),
-            yil: created.year,
-            saat: session.saat,
-            unixZamani: created.timestamp,
-            channelId: interaction.channelId,
-            guildId: interaction.guildId,
-            creatorId: interaction.user.id,
-            creatorMention: `<@${interaction.user.id}>`,
-            displayLanguage: language,
+            ...data, capacity: capacityForType(data.contentType),
+            tarih: discordTarihMetniOlustur(data.unixZamani),
+            channelId: interaction.channelId, guildId: interaction.guildId,
+            creatorId: interaction.user.id, creatorMention: '<@' + interaction.user.id + '>',
+            displayLanguage: interactionLanguage(interaction),
             tanklar: [], healerlar: [], dpsler: [], yedekler: [],
-            siradakiSira: 1,
-            planOverrides: {},
-            planNeedsRefresh: true
+            siradakiSira: 1, planOverrides: {}, planNeedsRefresh: true
         });
-        const sharedLanguage = raidLanguage(raid);
-        const message = await interaction.channel.send({
-            embeds: [raidEmbedOlustur(raid, sharedLanguage)],
-            components: [raidButtonRow(false, sharedLanguage)]
-        });
-        saveRaid(message.id, raid);
-        raidKurulumHafizasi.delete(interaction.user.id);
-        await interaction.editReply({ content: t(language, 'raid.creation.success', { capacity: raid.capacity }), components: [] });
-        return;
+        // Retain a sent message if persistence fails, so retry saves it instead
+        // of publishing another raid. Discord also deduplicates the nonce.
+        if (!session.publishedMessage) session.publishedMessage = await sendEmojiSafe(interaction.channel, 'send', {
+            embeds: [raidEmbedOlustur(raid)], components: [raidButtonRow()],
+            nonce: session.token, enforceNonce: true
+        }, interaction);
+        saveRaid(session.publishedMessage.id, raid);
     }
-    return null;
+});
+
+async function handleRaidCreation(interaction) {
+    return raidCreation.handle(interaction);
 }
 
 async function handleRegistration(interaction) {
@@ -2007,6 +1863,7 @@ async function handlePlanInteraction(interaction) {
 }
 
 async function raidSisteminiYonet(interaction) {
+    interaction = emojiSafeInteraction(interaction);
     try {
         const creationHandled = await handleRaidCreation(interaction);
         if (creationHandled !== null) return creationHandled;
@@ -2045,6 +1902,10 @@ module.exports = {
     getAllRaids,
     buildRaidMessagePayload,
     _test: {
+        buildAbsenceWarningEmbed,
+        sendAbsenceWarning,
+        buildRaidNotificationEmbed,
+        manualRaidLinkRow,
         buildManualRaidAddEmbed,
         sendManualRaidAddNotification,
         normalizeRaid,

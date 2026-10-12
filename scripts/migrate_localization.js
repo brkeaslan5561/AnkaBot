@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const { configureLocalization } = require('../localization');
 const { getAllRaids, buildRaidMessagePayload, _test } = require('../raid');
+const { sendEmojiSafe } = require('../raid_emojis');
 
 async function migrateLocalization(client, options = {}) {
     const dryRun = Boolean(options.dryRun);
@@ -33,7 +34,7 @@ async function migrateLocalization(client, options = {}) {
                 logger.log(`[dry-run] ${id}: would add localized raid card and language selector`);
                 continue;
             }
-            await message.edit(buildRaidMessagePayload(raid));
+            await sendEmojiSafe(message, 'edit', buildRaidMessagePayload(raid), { client, channel: message.channel });
             summary.updated += 1;
             logger.log(`[updated] ${id}`);
         } catch (error) {

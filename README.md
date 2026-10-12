@@ -66,7 +66,8 @@ Botun kanalda `Mesaj Gönder`, `Bağlantı Yerleştir`, `Dosya Ekle`, `Mesaj Ge�
 cd ~/AnkaBot
 cp raid_data.json raid_data.backup.json 2>/dev/null || true
 cp raid_profiles.json raid_profiles.backup.json 2>/dev/null || true
-git pull origin main
+cp user_time_preferences.json user_time_preferences.backup.json 2>/dev/null || true
+git pull --ff-only origin main
 npm ci --omit=dev
 ```
 
@@ -218,6 +219,76 @@ Bu dosyalar Git tarafından izlenmez ve ilk kullanımda güvenli şekilde oluşt
 
 `/raid-oyuncu-ekle`, yeni bir Discord kullanıcısının kaydı başarıyla diske yazıldıktan sonra tek bir Türkçe/İngilizce embed DM gönderir. Mevcut kaydı güncellemek, rol değiştirmek, PNG yenilemek ve botu yeniden başlatmak bildirim göndermez. Oyuncu çıkarılıp yeniden eklenirse yeni bildirim gönderilir. `/düzenle` mevcut projede yalnızca raid tarihi, saati ve açıklamasını değiştirir; oyuncu eklemez.
 
-Bildirim gerçek yerleşimi (yedek dahil) ve `unixZamani` değerini `Europe/Istanbul` saat diliminde gösterir. Geçerli kayıtlı sunucu, kanal ve mesaj kimlikleri varsa raid bağlantısı eklenir. Discord kimliği olmayan katılımcılar atlanır. DM hataları kalıcı/geçici/bilinmeyen olarak loglanır; kayıt korunur, lidere mevcut ephemeral yanıtta bilgi verilir ve yeniden gönderim denenmez. Bildirim geçmişi için yeni dosya veya veri şeması eklenmez.
+Manuel ekleme ve normal kayıt DM'leri aynı turuncu temayı kullanır. Türkçe etiketler kalın, İngilizce karşılıkları ve bilgi değerleri normal ağırlıktadır. Tarih/saat, Türkiye saatinden zaten hesaplanmış `unixZamani` üzerinden Discord timestamp olarak gösterilir; Discord bunları okuyanın yerel saatine uyarlar. Kayıt onayında `Kalan / Time Left` dinamik göreli timestamp kullanır. Manuel bildirim gerçek yerleşimi (yedek dahil) gösterir; Discord'dan alınan gerçek raid mesajının adresi varsa `Raid'e Git / View Raid` bağlantı butonu eklenir. Mesaj doğrulanamazsa bağlantı gösterilmez; kullanıcı hedef kanala erişim iznine sahip olmalıdır. Discord kimliği olmayan katılımcılar atlanır. DM hataları kalıcı/geçici/bilinmeyen olarak loglanır; kayıt korunur, lidere mevcut ephemeral yanıtta bilgi verilir ve yeniden gönderim denenmez. Bildirim geçmişi için yeni dosya veya veri şeması eklenmez.
 
 Örnek gerçek EmbedBuilder çıktısı: `previews/manual-raid-add-embed.json`. Bildirim testleri: `node --test test/raid_manual_notification.test.js` (Discord ve disk yazımları testte taklit edilir).
+
+## Uluslararası raid oluşturma
+
+`/raid-oluştur` tek komuttur; İngilizce Discord istemcisinde `/create-raid` adı görünür. Yeni oluşturma sihirbazının tüm metinleri Türkçe/İngilizcedir. Katılım, manuel ekleme ve diğer yönetim ekranlarının dil sistemleri değişmez.
+
+1. Raid veya özel zindan/trial seçilir.
+2. İlk kullanımda lider saat dilimini seçer. Sonraki kullanımlarda Discord kullanıcı ID'sine kayıtlı tercih gelir; değiştirilebilir. Discord'dan saat dilimi tahmini yapılmaz.
+3. Menüde olmayan bir bölge için **Diğer / IANA adı gir** ile herhangi bir geçerli IANA adı girilebilir (`Asia/Tokyo`, `Australia/Lord_Howe` gibi). İsteğe bağlı bölgesel kod, tarih/saat biçimini belirler (`en-US`, `en-GB`, `tr-TR` gibi).
+4. **Otomatik / 12 / 24 saat** seçilir. Türkiye, Londra, Berlin ve ABD'nin yaygın bölgeleri için açık bölge–locale eşleştirmeleri vardır; diğer bölgelerde kullanıcının bölgesel/Discord locale tercihi kullanılır. Kıta adına göre format tahmini yapılmaz. Her zaman 12/24 elle seçilebilir. 12 saat biçiminde AM/PM menüsü vardır; saat alanına doğrudan `9:15 PM` yazmak da mümkündür.
+5. Tarih `YYYY-MM-DD`, saat herhangi bir geçerli dakika ile girilir. `20:05`, `21:15`, `22:45` kabul edilir; hazır saat listesine bağlı değildir. Yıl açıkça girilir, geçmiş tarih sessizce sonraki yıla taşınmaz.
+6. Son önizlemede yerel tarih/saat, IANA bölgesi ve Discord timestamp görünür. **Onayla / Confirm** olmadan raid yayınlanmaz. Yinelenen onaylar aynı oturumda ikinci raid oluşturmaz.
+
+Saat dilimi hesaplamaları Node.js `Intl`/ICU IANA verisini kullanır. Yerel tarih/saatin olası UTC karşılıkları bölgenin o tarihteki gerçek offsetleriyle hesaplanır ve geri dönüşümle doğrulanır. Yaz saatinde atlanan saat reddedilir; iki kez yaşanan saat için iki UTC seçeneği gösterilir. Sabit UTC+3 hesabı veya AWS sistem saat dilimi kullanılmaz. Sunucudaki Node.js/ICU verisi güncel tutulmalıdır.
+
+Saat biçimini değiştirmek `21:00` ile `9:00 PM` görünümü arasında geçiş yapar; UTC anını değiştirmez. Discord `<t:...:F>`, `<t:...:t>` ve `<t:...:R>` etiketlerini okuyanın istemci ayarlarına göre gösterir. Ana raid kartı ve DM'lerde ayrıca **Raid Liderinin Saati / Organizer Time** sabit metni bulunur; burada liderin 12/24 tercihi korunur.
+
+### Saklanan veriler ve eski raidler
+
+Yeni `user_time_preferences.json` dosyası mevcut `JsonStore` atomik JSON yazımını kullanır ve Git tarafından dışlanır. Sunucuya göre değil, Discord kullanıcı ID'sine göre saklanır:
+
+```json
+{
+  "version": 1,
+  "users": {
+    "DISCORD_USER_ID": {
+      "preferredTimeZone": "America/New_York",
+      "preferredHourFormat": "auto",
+      "preferredLocale": "en-US"
+    }
+  }
+}
+```
+
+Her raid, `raid_data.json` içinde kesin UTC başlangıcını mevcut `unixZamani` alanında saniye olarak tutar. Ayrıca `organizerTimeZone`, çözümlenmiş `organizerHourFormat` (`12`/`24`), `organizerLocale`, `originalLocalDate`, `originalLocalTime` saklanır. Mevcut `gun`, `ay`, `yil`, `saat` alanları da uyumluluk için güncellenir. Bir liderin sonraki tercih değişiklikleri veya başka liderlerin raidleri bu kayıtları değiştirmez. Zamanlayıcı ve yoklama akışları aynı UTC alanını kullanmayı sürdürür.
+
+Eski raidlerin UTC değeri aynen korunur; saat dilimi uydurulmaz. Saat dilimi bilinmeyen eski bir raidin saati düzenlenecekse `/düzenle` komutunda **saat-dilimi / time-zone** açıkça belirtilmelidir. Saat dilimi bilinen raidler kendi kayıtlı bölgesinde düzenlenir. Yeni isteğe bağlı alanlar: **yil / year**, **saat-dilimi / time-zone**, **tekrar-saati / repeated-time** (`İlk / Earlier`, `İkinci / Later`). Son alan DST nedeniyle iki kez yaşanan saati ayırır. Saat girişi `HH:mm` veya açık AM/PM ile yapılabilir. Düzenleme yalnızca aynı sunucudaki raid liderine veya Sunucuyu Yönet yetkilisine açıktır. Sadece açıklama düzenlemek eski zaman bilgilerine dokunmaz.
+
+### Merkezi emoji sunucusu
+
+Mevcut uygulama emojileri yeniden kullanılır; ID'leri değiştirilmez. [Discord uygulama emojileri](https://github.com/discord/discord-api-docs/blob/main/developers/resources/emoji.mdx) bot tarafından sunucular arasında kullanılabilir ve `Use External Emojis` izni gerektirmez. Bu nedenle eşya emojileri için merkezi sunucu zorunlu değildir.
+
+Mevcut rol/klas veya diğer **sunucu emojilerini** merkezi bir sunucudan kullanmak için:
+
+1. Botu emojilerin zaten bulunduğu sunucuya ekleyin. ID'leri korumak için o emojileri silip yeniden yüklemeyin; başka sunucuya kopyalamak Discord'da yeni ID oluşturur.
+2. `ANKABOT_EMOJI_GUILD_ID` ortam değişkenine bu sunucunun ID'sini yazın. Bu tek yeni ortam değişkenidir ve isteğe bağlıdır. Kod `.env` dosyasını otomatik yüklemez; değişkeni süreç/PM2 ortamında tanımlayın.
+3. Hedef raid kanalında botun **Harici Emojileri Kullan / Use External Emojis** iznini kontrol edin. Kaynak sunucudaki emojiler role kısıtlıysa bot rolüne erişim verin. Mevcut mesaj gönderme/bağlantı yerleştirme izinleri de gerekir. [Discord izinleri](https://github.com/discord/discord-api-docs/blob/main/developers/topics/permissions.mdx)
+4. Eşya emojileri merkezden eşleştirilecekse mevcut `emojiNameFor(category, item)` adı veya `raid_catalog.js` içindeki eşyanın `id` adı kullanılabilir. Mevcut erişilebilir uygulama emojisi önceliklidir. Yerel görseli olmayan aura öğeleri de erişilebilir merkezi/uygulama emojileriyle eşleştirilebilir.
+
+Merkezi sunucu erişilemiyorsa, özel emoji silinmişse veya harici emoji izni yoksa raid ekranları Unicode/metin ile devam eder; hatalar loglanır. Discord özel emojiyi API seviyesinde reddederse yalnızca bu kesin ret için bir defa emojisiz denenir; ağ hatasında mükerrer mesaj riski nedeniyle tekrar gönderilmez. `GuildExpressions` intent'i eklendi; bu ayrıcalıklı intent değildir. PNG renderer, yerel ikonlar ve çizim tasarımı değiştirilmedi.
+
+PM2 ortamını tanımlamak/güncellemek için (örnek ID'yi kendi merkezi sunucunuzun ID'siyle değiştirin):
+
+```bash
+cd ~/AnkaBot
+export ANKABOT_EMOJI_GUILD_ID="MERKEZI_SUNUCU_ID"
+pm2 restart AnkaBot --update-env
+pm2 save
+```
+
+Merkezi sunucu kullanmayacaksanız bu değişkeni tanımlamayın. Yeni bağımlılık veya veritabanı göçü gerekmez. Kod GitHub'a gönderildikten sonra AWS güncellemesi:
+
+```bash
+cd ~/AnkaBot
+git pull --ff-only origin main
+npm ci --omit=dev
+npm run check && npm test && pm2 restart AnkaBot --update-env
+pm2 logs AnkaBot --lines 50
+```
+
+Saat dönüşümü ve sihirbaz testleri `test/raid_time.test.js`, `test/raid_creation.test.js`, `test/raid_time_integration.test.js`; merkezi emoji ve hata/fallback testleri `test/raid_emojis.test.js` dosyalarındadır. Testler Discord gönderimlerini taklit eder; canlı farklı-sunucu izinleri ve kullanıcı istemcilerindeki son görünüm ayrıca Discord üzerinde kontrol edilmelidir.

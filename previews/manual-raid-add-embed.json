@@ -3,31 +3,16 @@
     {
       "color": 15043131,
       "title": "Raid'e Eklendiniz!",
-      "description": "*You Have Been Added to a Raid!*\n\nBir raid lideri tarafından aşağıdaki organizasyona manuel olarak eklendiniz.\n*You have been manually added to the following raid by a raid leader.*",
+      "description": "*You Have Been Added to a Raid!*\n\n**Bir raid lideri tarafından aşağıdaki organizasyona manuel olarak eklendiniz.**\n*You have been manually added to the following raid by a raid leader.*",
       "fields": [
         {
-          "name": "Raid",
-          "value": "MSH (Master Soul Harvester)",
-          "inline": true
-        },
-        {
-          "name": "Rol / Role",
-          "value": "DPS",
+          "name": "​",
+          "value": "**Raid**\nMSH (Master Soul Harvester)",
           "inline": true
         },
         {
           "name": "​",
-          "value": "​",
-          "inline": true
-        },
-        {
-          "name": "Tarih / Date",
-          "value": "11.10.2026",
-          "inline": true
-        },
-        {
-          "name": "Saat / Time",
-          "value": "21:00 (TR)",
+          "value": "**Rol** / Role\nDPS",
           "inline": true
         },
         {
@@ -37,7 +22,22 @@
         },
         {
           "name": "​",
-          "value": "Lütfen raid saatinde hazır olun.\n*Please be ready at the scheduled raid time.*"
+          "value": "**Tarih** / Date\n<t:1791741600:D>",
+          "inline": true
+        },
+        {
+          "name": "​",
+          "value": "**Saat** / Time\n<t:1791741600:t>",
+          "inline": true
+        },
+        {
+          "name": "​",
+          "value": "​",
+          "inline": true
+        },
+        {
+          "name": "​",
+          "value": "**Lütfen raid saatinde hazır olun.**\n*Please be ready at the scheduled raid time.*"
         }
       ],
       "footer": {

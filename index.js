@@ -10,7 +10,7 @@ const { configureLocalization, rememberInteractionLocale } = require('./localiza
 configureLocalization(config);
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildExpressions, GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages],
     partials: [Partials.Channel, Partials.Message]
 });
 

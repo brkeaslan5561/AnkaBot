@@ -1,5 +1,6 @@
 const { randomBytes } = require('crypto');
 const { EmbedBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { organizerTime } = require('./raid_time');
 
 const INSTRUCTIONS = 'Gerekirse atamaları düzenleyebilir veya tabloyu yeniden oluşturabilirsiniz. Kadroyu kontrol ettikten sonra onaylayın.\nYou can edit assignments or regenerate the plan if needed. Please review the roster before approving.';
 const trim = (value, limit) => {
@@ -49,6 +50,11 @@ function buildLeaderEmbed(raid, plans, { confirmation = false, error = false, im
             ...warningFields(plan.warnings, plans.en?.warnings)
         )
         .setFooter({ text: INSTRUCTIONS });
+    const organizer = organizerTime(raid);
+    if (organizer) embed.addFields(
+        { name: 'Raid Liderinin Saati / Organizer Time', value: organizer },
+        { name: 'Yerel Saatiniz / Your Local Time', value: `<t:${Math.floor(raid.unixZamani)}:F> • <t:${Math.floor(raid.unixZamani)}:R>` }
+    );
     if (imageName) embed.setImage(`attachment://${imageName}`);
     if (error) embed.addFields({ name: 'Hata / Error', value: 'Kontrol mesajı güncellenemedi. Yenile düğmesiyle tekrar deneyin.\nThe review message could not be updated. Please try Regenerate.' });
     return embed;

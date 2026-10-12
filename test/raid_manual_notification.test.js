@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { EmbedBuilder } = require('discord.js');
-const { _test: { buildManualRaidAddEmbed, sendManualRaidAddNotification, registerParticipant } } = require('../raid');
+const { _test: { buildRaidNotificationEmbed, buildManualRaidAddEmbed, manualRaidLinkRow, sendManualRaidAddNotification, registerParticipant } } = require('../raid');
 
 const messageId = '123456789012345678';
 const userId = '223456789012345678';
@@ -19,7 +19,8 @@ function fixture() {
 }
 function harness(raid = fixture()) {
     const sent = [], events = [], replies = [];
-    const state = { raid, sent, events, replies, saveError: null, dmError: null, cardFails: false };
+    const state = { raid, sent, events, replies, saveError: null, dmError: null, cardFails: false,
+        message: { id: messageId, url: `https://discord.com/channels/323456789012345678/423456789012345678/${messageId}` } };
     const deps = {
         interactionLanguage: () => 'tr',
         raidHafizasi: new Map([[messageId, raid]]),
@@ -32,7 +33,7 @@ function harness(raid = fixture()) {
             if (state.saveError) throw state.saveError;
             events.push('saved');
         },
-        updateRaidCard: async () => { events.push('card'); return state.cardFails ? null : {}; },
+        updateRaidCard: async () => { events.push('card'); return state.cardFails ? null : state.message; },
         sendManualRaidAddNotification,
         t: (language, key) => key
     };
@@ -53,19 +54,23 @@ function harness(raid = fixture()) {
     });
     return state;
 }
-function field(json, name) { return json.fields.find(item => item.name === name)?.value; }
+function field(json, name) {
+    const [tr, en] = name.split(' / ');
+    const label = `**${tr}**${en ? ` / ${en}` : ''}\n`;
+    return json.fields.find(item => item.value.startsWith(label))?.value.slice(label.length);
+}
 
-test('real EmbedBuilder creates one bilingual orange embed, correct TR date and original link', () => {
+test('real EmbedBuilder creates one bilingual orange embed with unbolded Discord timestamps', () => {
     const embed = buildManualRaidAddEmbed({}, messageId, fixture(), { role: 'dps' });
     assert.ok(embed instanceof EmbedBuilder);
     const json = embed.toJSON();
     assert.equal(json.color, 0xE58A3B);
     assert.equal(json.title, "Raid'e Eklendiniz!");
-    assert.ok(json.description.startsWith('*You Have Been Added to a Raid!*\n\nBir raid lideri'));
-    assert.equal(field(json, 'Tarih / Date'), '11.10.2026');
-    assert.equal(field(json, 'Saat / Time'), '21:00 (TR)');
+    assert.ok(json.description.startsWith('*You Have Been Added to a Raid!*\n\n**Bir raid lideri'));
+    assert.equal(field(json, 'Tarih / Date'), `<t:${fixture().unixZamani}:D>`);
+    assert.equal(field(json, 'Saat / Time'), `<t:${fixture().unixZamani}:t>`);
     assert.equal(field(json, 'Rol / Role'), 'DPS');
-    assert.ok(json.fields.some(f => f.value.includes(`https://discord.com/channels/323456789012345678/423456789012345678/${messageId}`)));
+    assert.ok(json.fields.every(f => f.name === '\u200b'));
     assert.equal(json.footer.text, 'AnkaBot • Raid Notification');
 });
 
@@ -85,11 +90,11 @@ test('long/missing data, missing link and bot avatar stay within Discord limits'
     assert.equal(field(buildManualRaidAddEmbed({}, messageId, {}, {}).toJSON(), 'Raid'), '—');
 });
 
-test('Istanbul conversion crosses midnight once, independent of host timezone', () => {
+test('raid instant is preserved without a second timezone offset', () => {
     const raid = { ...fixture(), unixZamani: Date.parse('2026-10-11T22:30:00Z') / 1000 };
     const json = buildManualRaidAddEmbed({}, messageId, raid, { role: 'heal' }).toJSON();
-    assert.equal(field(json, 'Tarih / Date'), '12.10.2026');
-    assert.equal(field(json, 'Saat / Time'), '01:30 (TR)');
+    assert.equal(field(json, 'Tarih / Date'), `<t:${raid.unixZamani}:D>`);
+    assert.equal(field(json, 'Saat / Time'), `<t:${raid.unixZamani}:t>`);
     assert.equal(field(json, 'Rol / Role'), 'HEALER');
 });
 
@@ -191,6 +196,53 @@ test('raid card refresh failure does not prevent a successful addition notificat
     h.cardFails = true;
     await h.add();
     assert.equal(h.sent.length, 1);
+    assert.equal(h.sent[0].payload.components, undefined);
+});
+
+test('raid link uses the actual fetched message, not stale stored guild/channel IDs', async () => {
+    const h = harness({ ...fixture(), guildId: '823456789012345678', channelId: '923456789012345678' });
+    await h.add();
+    const button = h.sent[0].payload.components[0].toJSON().components[0];
+    assert.equal(button.style, 5);
+    assert.equal(button.label, "Raid'e Git / View Raid");
+    assert.equal(button.url, h.message.url);
+    assert.ok(!button.custom_id);
+});
+
+test('unverified, wrong-message and external links are omitted', () => {
+    for (const message of [null, {},
+        { id: messageId, url: 'https://example.com/' },
+        { id: messageId, url: 'https://discord.com/channels/323456789012345678/423456789012345678/523456789012345678' },
+        { id: 'wrong', url: `https://discord.com/channels/323456789012345678/423456789012345678/${messageId}` }
+    ]) assert.equal(manualRaidLinkRow(messageId, message), null);
+});
+
+test('signup matches manual theme; Turkish labels are bold while English and values are regular', () => {
+    const raid = fixture();
+    const signup = buildRaidNotificationEmbed({}, raid, { role: 'heal' });
+    const json = signup.toJSON();
+    const manual = buildManualRaidAddEmbed({}, messageId, raid, { role: 'heal' }).toJSON();
+    assert.equal(json.color, manual.color);
+    assert.equal(json.title, 'Kayıt Başarılı');
+    assert.ok(json.description.startsWith('*Signup Confirmed*'));
+    assert.deepEqual(json.footer, manual.footer);
+    assert.deepEqual(json.fields.slice(0, 6), manual.fields.slice(0, 6));
+    assert.equal(field(json, 'Kalan / Time Left'), `<t:${raid.unixZamani}:R>`);
+    assert.equal(field(json, 'Rol / Role'), 'HEALER');
+    for (const name of ['Tarih / Date', 'Saat / Time', 'Rol / Role', 'Kalan / Time Left']) {
+        assert.ok(!field(json, name).includes('**'));
+    }
+    assert.ok(!JSON.stringify(json).includes('Remaining'));
+    assert.ok(signup.length < 6000);
+});
+
+test('past raid retains its actual relative timestamp; invalid dates use safe placeholders', () => {
+    const raid = { ...fixture(), unixZamani: 1_600_000_000 };
+    assert.equal(field(buildRaidNotificationEmbed({}, raid, {}).toJSON(), 'Kalan / Time Left'), '<t:1600000000:R>');
+    for (const unixZamani of [undefined, null, '', 'bad', -1, Infinity, 1e99]) {
+        const json = buildRaidNotificationEmbed({}, { unixZamani }, {}).toJSON();
+        for (const label of ['Tarih / Date', 'Saat / Time', 'Kalan / Time Left']) assert.equal(field(json, label), '—');
+    }
 });
 
 test('manual notification has only one production call site; signup retains its own DM', () => {
@@ -199,4 +251,21 @@ test('manual notification has only one production call site; signup retains its 
     const signup = source.slice(source.indexOf('async function completeRegistration('), source.indexOf('function findParticipant('));
     assert.ok(signup.includes('sendRegistrationReminder('));
     assert.ok(!signup.includes('sendManualRaidAddNotification('));
+});
+
+test('signup sender uses the shared design once and preserves its existing sent-user tracking', async () => {
+    let saves = 0;
+    const sent = [];
+    const senderSource = source.slice(source.indexOf('async function sendRegistrationReminder('), source.indexOf('function generatePlan('));
+    const send = new Function('buildRaidNotificationEmbed', 'saveRaid', `${senderSource}\nreturn sendRegistrationReminder;`)(
+        buildRaidNotificationEmbed, () => { saves++; }
+    );
+    const raid = { ...fixture(), registrationReminderSentUsers: [] };
+    const user = { id: userId, send: async payload => sent.push(payload) };
+    assert.equal(await send({}, messageId, raid, user, 'heal'), true);
+    assert.equal(await send({}, messageId, raid, user, 'heal'), false);
+    assert.equal(sent.length, 1);
+    assert.equal(saves, 1);
+    assert.equal(sent[0].embeds[0].toJSON().color, 0xE58A3B);
+    assert.equal(field(sent[0].embeds[0].toJSON(), 'Rol / Role'), 'HEALER');
 });
