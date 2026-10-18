@@ -10,7 +10,7 @@ async function migrateLocalization(client, options = {}) {
     const summary = { eligible: 0, updated: 0, skipped: 0, failed: 0 };
 
     for (const { id, raid } of entries) {
-        if (_test.isRaidClosed(raid)) {
+        if (raid.published === false || _test.isRaidClosed(raid)) {
             summary.skipped += 1;
             logger.log(`[skip] ${id}: raid is closed`);
             continue;

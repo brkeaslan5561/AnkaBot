@@ -18,6 +18,8 @@ const { assignRaid, inventoryOf } = require('./raid_assignment');
 const { renderRaidTable } = require('./raid_table');
 const { createLeaderReview } = require('./raid_leader');
 const { createRaidCreation } = require('./raid_creation');
+const { scheduleCommand, shareScheduleCommand, canManage, publicationTime, scheduledConfirmation, publicationMarker, createPublicationWorker } = require('./raid_schedule');
+const { createShareSchedule } = require('./share_schedule');
 const { createTimePreferences, resolveRaidTimeEdit } = require('./raid_time');
 const { sendEmojiSafe, emojiSafeInteraction } = require('./raid_emojis');
 const {
@@ -135,7 +137,8 @@ const raidDuzenleKomutu = new SlashCommandBuilder()
     .addStringOption(option => option.setName('saat-dilimi').setNameLocalizations({ 'en-US': 'time-zone', 'en-GB': 'time-zone' }).setDescription('IANA saat dilimi / IANA time zone (Europe/Istanbul)'))
     .addStringOption(option => option.setName('tekrar-saati').setNameLocalizations({ 'en-US': 'repeated-time', 'en-GB': 'repeated-time' }).setDescription('Tekrarlanan yerel saat / Repeated local time').addChoices(
         { name: 'İlk / Earlier', value: 'earlier' }, { name: 'İkinci / Later', value: 'later' }
-    ));
+    ))
+    .addBooleanOption(option => option.setName('cancel-scheduled').setDescription('Cancel an unpublished scheduled raid.'));
 
 function interactionLanguage(interaction) {
     return languageForInteraction(interaction);
@@ -157,7 +160,11 @@ function deepClone(value) {
 
 function atomicJsonWrite(filePath, value) {
     const tempPath = `${filePath}.tmp`;
-    fs.writeFileSync(tempPath, JSON.stringify(value, null, 2), 'utf8');
+    const fd = fs.openSync(tempPath, 'w');
+    try {
+        fs.writeFileSync(fd, JSON.stringify(value, null, 2), 'utf8');
+        fs.fsyncSync(fd);
+    } finally { fs.closeSync(fd); }
     fs.renameSync(tempPath, filePath);
 }
 
@@ -187,6 +194,17 @@ function contentTypeFromValue(value) {
 
 function capacityForType(contentType) {
     return contentType === 'dungeon' ? 5 : 10;
+}
+
+function dpsLimitForRaid(raid) {
+    const name = String(raid.zindanKodu || raid.zindan || '').trim().toUpperCase();
+    if (/^MSOD(?:\s|\(|$)/.test(name) || name === 'MASTER SHACKLES OF DIVINITY') return 7;
+    if (/^MSH(?:\s|\(|$)/.test(name) || name === 'MASTER SOUL HARVESTER') return 6;
+    return Infinity;
+}
+
+function hasRaidRoleSpace(raid, role) {
+    return mainCount(raid) < raid.capacity && (role !== 'dps' || raid.dpsler.length < dpsLimitForRaid(raid));
 }
 
 function allClassOptions() {
@@ -286,7 +304,9 @@ function normalizeRaid(raid) {
 }
 
 function loadRaids() {
-    const data = safeJsonRead(RAID_DATA_DOSYASI, { raids: {} });
+    // Fail closed on corrupt/unreadable raid data instead of overwriting it
+    // with an empty store and losing pending publication claims.
+    const data = fs.existsSync(RAID_DATA_DOSYASI) ? JSON.parse(fs.readFileSync(RAID_DATA_DOSYASI, 'utf8')) : { raids: {} };
     const raids = Array.isArray(data) ? Object.fromEntries(data) : (data.raids || data);
     for (const [messageId, raid] of Object.entries(raids || {})) {
         if (messageId && raid && typeof raid === 'object') raidHafizasi.set(messageId, normalizeRaid(raid));
@@ -299,11 +319,18 @@ function saveAllRaids() {
 }
 
 function saveRaid(messageId, raid) {
-    raidHafizasi.set(String(messageId), normalizeRaid(raid));
-    saveAllRaids();
+    const key = String(messageId);
+    const previous = raidHafizasi.get(key);
+    raidHafizasi.set(key, normalizeRaid(raid));
+    try { saveAllRaids(); }
+    catch (error) {
+        if (previous) raidHafizasi.set(key, previous); else raidHafizasi.delete(key);
+        throw error;
+    }
 }
 
 function raidMesajKayitlariniSil(messageIds) {
+    const previous = new Map(raidHafizasi);
     let silinenKayitSayisi = 0;
     for (const messageId of messageIds) {
         const normalizedId = String(messageId || '');
@@ -311,7 +338,10 @@ function raidMesajKayitlariniSil(messageIds) {
         dogrulanmisRaidMesajlari.delete(normalizedId);
         if (raidHafizasi.delete(normalizedId)) silinenKayitSayisi += 1;
     }
-    if (silinenKayitSayisi > 0) saveAllRaids();
+    if (silinenKayitSayisi > 0) {
+        try { saveAllRaids(); }
+        catch (error) { for (const [key, raid] of previous) raidHafizasi.set(key, raid); throw error; }
+    }
     return silinenKayitSayisi;
 }
 
@@ -482,16 +512,18 @@ function raidEmbedOlustur(raid, language = raidLanguage(raid)) {
     normalizeRaid(raid);
     const closed = isRaidClosed(raid);
     const color = closed ? '#E53935' : '#1D8BD1';
-    const title = closed ? '🔴 ASHES OF ANKA RAID · KAPANDI / CLOSED' : 'ASHES OF ANKA RAID · KAYIT / REGISTRATION';
-    const typeLabel = raid.contentType === 'dungeon' ? 'ZİNDAN' : 'TRIAL';
+    const englishOnly = raid.englishOnly === true;
+    if (englishOnly) language = 'en';
+    const title = englishOnly ? (closed ? 'ASHES OF ANKA RAID · CLOSED' : 'ASHES OF ANKA RAID · REGISTRATION') : closed ? '🔴 ASHES OF ANKA RAID · KAPANDI / CLOSED' : 'ASHES OF ANKA RAID · KAYIT / REGISTRATION';
+    const typeLabel = raid.contentType === 'dungeon' ? (englishOnly ? 'DUNGEON' : 'ZİNDAN') : 'TRIAL';
     const joined = mainCount(raid);
     const linkedTitle = `[${String(raid.zindan || raid.zindanKodu || 'RAID').toUpperCase()}](https://discord.com)`;
-    const statusLine = closed ? '\n\n**ETKİNLİK SONA ERDİ, KAYIT KAPALI. / THIS EVENT HAS ENDED; REGISTRATION IS CLOSED.**' : '';
+    const statusLine = englishOnly ? (closed ? '\n\n**THIS EVENT HAS ENDED; REGISTRATION IS CLOSED.**' : '') : closed ? '\n\n**ETKİNLİK SONA ERDİ, KAYIT KAPALI. / THIS EVENT HAS ENDED; REGISTRATION IS CLOSED.**' : '';
     // Preserve descriptions saved by the previous bilingual-description version.
     const emptyDescriptions = new Set(['AÇIKLAMA YOK / NO DESCRIPTION', 'Açıklama yok / No description', t('tr', 'raid.creation.no_description'), t('en', 'raid.creation.no_description')]);
     const description = String(raid.aciklama ?? [raid.descriptions?.tr, raid.descriptions?.en].filter(Boolean).join('\n'))
         .split('\n').filter(line => !emptyDescriptions.has(line.trim())).join('\n').trim();
-    const descriptionLine = description ? `\n\n<:zaciklama:1527641028171923537> **AÇIKLAMA / DESCRIPTION:**\n ${description}` : '';
+    const descriptionLine = description ? `\n\n<:zaciklama:1527641028171923537> **${englishOnly ? 'DESCRIPTION' : 'AÇIKLAMA / DESCRIPTION'}:**\n ${description}` : '';
     const timestamp = Number(raid.unixZamani);
     const timeLine = timestamp > 0 && Number.isFinite(new Date(timestamp * 1000).getTime())
         ? discordTarihMetniOlustur(timestamp) : raid.tarih || '—';
@@ -499,15 +531,15 @@ function raidEmbedOlustur(raid, language = raidLanguage(raid)) {
     return new EmbedBuilder()
         .setColor(color)
         .setTitle(title)
-        .setDescription(`## ${linkedTitle}\n\n**${typeLabel}**\n**PLAYERS:** ${joined}/${raid.capacity} • **RESERVE:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **TARİH / DATE:**\n ${timeLine}${descriptionLine}${statusLine}`)
+        .setDescription(`## ${linkedTitle}\n\n**${typeLabel}**\n**PLAYERS:** ${joined}/${raid.capacity} • **RESERVE:** ${raid.yedekler.length}\n\n<:ztarih:1527640859380813945> **${englishOnly ? 'DATE' : 'TARİH / DATE'}:**\n ${timeLine}${descriptionLine}${statusLine}`)
         .addFields(
             { name: `<:ztank:1527640905073295440> ${roleLabel(language, 'tank')} (${raid.tanklar.length})`, value: listText(raid.tanklar, false, language), inline: true },
             { name: `<:zhealer:1527640985520312440> ${roleLabel(language, 'heal')} (${raid.healerlar.length})`, value: listText(raid.healerlar, false, language), inline: true },
-            { name: `<:zdps:1527640943191265310> ${roleLabel(language, 'dps')} (${raid.dpsler.length})`, value: listText(raid.dpsler, false, language), inline: true },
+            { name: `<:zdps:1527640943191265310> ${roleLabel(language, 'dps')} (${raid.dpsler.length}${Number.isFinite(dpsLimitForRaid(raid)) ? `/${dpsLimitForRaid(raid)}` : ''})`, value: listText(raid.dpsler, false, language), inline: true },
             { name: `<:zyedek:1527640786185879573> RESERVE (${raid.yedekler.length})`, value: listText(raid.yedekler, true, language), inline: true }
         )
         .setTimestamp()
-        .setFooter({ text: `ASHES OF ANKA • ${joined}/${raid.capacity}` });
+        .setFooter({ text: `ASHES OF ANKA • ${joined}/${raid.capacity}${raid.raidId ? ` • ${publicationMarker(raid)}` : ''}` });
 }
 
 function raidButtonRow(disabled = false, language = 'tr') {
@@ -646,10 +678,11 @@ function registerParticipant(raid, user, displayName, requestedRole, className, 
     const existing = findAndRemoveParticipant(raid, user.id);
     const order = existing?.player?.sira || raid.siradakiSira++;
     let actualRole = requestedRole;
+    const dpsLimitReached = requestedRole === 'dps' && existing?.role !== 'dps' && raid.dpsler.length >= dpsLimitForRaid(raid);
 
     if (options.preservePlacement && existing) {
         actualRole = existing.role === 'yedek' ? 'yedek' : existing.role;
-    } else if (requestedRole !== 'yedek' && mainCount(raid) >= raid.capacity) {
+    } else if (requestedRole !== 'yedek' && (mainCount(raid) >= raid.capacity || dpsLimitReached)) {
         actualRole = 'yedek';
     }
 
@@ -671,7 +704,7 @@ function registerParticipant(raid, user, displayName, requestedRole, className, 
     else raid.yedekler.push(record);
 
     markPlanDirty(raid);
-    return { record, overflow: actualRole === 'yedek' && requestedRole !== 'yedek', existing };
+    return { record, overflow: actualRole === 'yedek' && requestedRole !== 'yedek', dpsLimitReached, existing };
 }
 
 function profileFlow(session) {
@@ -833,7 +866,7 @@ async function completeRegistration(interaction, session, profileWasLoaded = fal
     profilSecimHafizasi.delete(interaction.user.id);
 
     const message = result.overflow
-        ? t(language, 'raid.registration.overflow', { capacity: raid.capacity, role: roleLabel(language, session.role) })
+        ? t(language, result.dpsLimitReached ? 'raid.registration.dps_overflow' : 'raid.registration.overflow', { capacity: result.dpsLimitReached ? dpsLimitForRaid(raid) : raid.capacity, role: roleLabel(language, session.role) })
         : t(language, 'raid.registration.success', {
             className: session.className,
             profileNote: t(language, profileWasLoaded ? 'raid.registration.profile_loaded' : 'raid.registration.profile_saved')
@@ -851,6 +884,7 @@ function findParticipant(raid, userId) {
 }
 
 function findReserveCandidate(raid, role) {
+    if (!hasRaidRoleSpace(raid, role)) return null;
     const ordered = [...raid.yedekler].sort((a, b) => (Number(a.sira) || 9999) - (Number(b.sira) || 9999));
     return ordered.find(player => player.intendedRole === role) || ordered[0] || null;
 }
@@ -865,7 +899,7 @@ function reserveApprovalRow(messageId, language = 'tr') {
 
 async function promoteReserve(client, messageId, selectedUserId = null) {
     const raid = raidHafizasi.get(String(messageId));
-    if (!raid || !raid.pendingReserve || mainCount(raid) >= raid.capacity) return null;
+    if (!raid || !raid.pendingReserve || !hasRaidRoleSpace(raid, raid.pendingReserve.role)) return null;
     const candidateId = selectedUserId || raid.pendingReserve.candidateUserId;
     const candidateIndex = raid.yedekler.findIndex(player => String(player.userId) === String(candidateId));
     if (candidateIndex < 0) {
@@ -1390,6 +1424,7 @@ async function schedulerTick(client) {
         const nowSeconds = Math.floor(Date.now() / 1000);
         for (const [messageId, raid] of raidHafizasi.entries()) {
             normalizeRaid(raid);
+            if (raid.published === false) continue;
             if (!await raidMesajininVarliginiDogrula(client, messageId, raid)) continue;
 
             const secondsUntil = Number(raid.unixZamani || 0) - nowSeconds;
@@ -1444,15 +1479,16 @@ async function schedulerTick(client) {
 
 function raidZamanlayicisiniBaslat(client) {
     if (schedulerTimer) return;
-    schedulerTick(client).catch(console.error);
-    schedulerTimer = setInterval(() => schedulerTick(client), 30_000);
+    const tick = async () => { await publicationWorker.tick(client); await schedulerTick(client); };
+    tick().catch(console.error);
+    schedulerTimer = setInterval(() => tick().catch(console.error), 30_000);
     if (typeof schedulerTimer.unref === 'function') schedulerTimer.unref();
 }
 
 async function raidAutocompleteYonet(interaction) {
     if (!interaction.isAutocomplete()) return;
     const choices = raidAutocompleteChoices(
-        raidHafizasi.entries(),
+        [...raidHafizasi.entries()].filter(([, raid]) => !raid.guildId || String(raid.guildId) === String(interaction.guildId)),
         interaction.commandName,
         interaction.options.getFocused(),
         interactionLanguage(interaction)
@@ -1477,7 +1513,7 @@ function raidAutocompleteChoices(entries, commandName, focusedValue = '', langua
 
     return [...entries]
         .map(([messageId, raid]) => [String(messageId), raid])
-        .filter(([, raid]) => !manualAdd || !isRaidClosed(raid))
+        .filter(([, raid]) => !manualAdd || (raid.published !== false && !isRaidClosed(raid)))
         .sort(([firstId, firstRaid], [secondId, secondRaid]) => {
             const firstClosed = isRaidClosed(firstRaid);
             const secondClosed = isRaidClosed(secondRaid);
@@ -1501,7 +1537,7 @@ function getRaid(messageId) {
 
 function getRecentRaids({ guildId = null, limit = 10, includeClosed = false } = {}) {
     return [...raidHafizasi.entries()]
-        .filter(([, raid]) => (!guildId || String(raid.guildId) === String(guildId)) && (includeClosed || !isRaidClosed(raid)))
+        .filter(([, raid]) => raid.published !== false && (!guildId || String(raid.guildId) === String(guildId)) && (includeClosed || !isRaidClosed(raid)))
         .sort(([firstId], [secondId]) => raidMessageIdDesc(firstId, secondId))
         .slice(0, Math.max(1, Math.min(25, Number(limit) || 10)))
         .map(([id, raid]) => ({ id, raid }));
@@ -1520,6 +1556,32 @@ function buildRaidMessagePayload(raid) {
     };
 }
 
+function newRaidRecord(interaction, data, englishOnly = false) {
+    return normalizeRaid({
+        ...data, capacity: capacityForType(data.contentType),
+        tarih: discordTarihMetniOlustur(data.unixZamani),
+        channelId: interaction.channelId, guildId: interaction.guildId,
+        creatorId: interaction.user.id, creatorMention: '<@' + interaction.user.id + '>',
+        displayLanguage: englishOnly ? 'en' : interactionLanguage(interaction), ...(englishOnly ? { englishOnly: true } : {}),
+        tanklar: [], healerlar: [], dpsler: [], yedekler: [],
+        siradakiSira: 1, planOverrides: {}, planNeedsRefresh: true
+    });
+}
+
+const publicationWorker = createPublicationWorker({
+    entries: () => [...raidHafizasi.entries()], save: saveRaid, buildPayload: buildRaidMessagePayload,
+    send: (channel, payload, client) => sendEmojiSafe(channel, 'send', payload, { client, channel }),
+    commit: (id, raid, messageId, publishedAt) => {
+        const updated = { ...raid, published: true, publishedAt, messageId, status: 'published' };
+        delete updated.publicationAttempt; delete updated.retryAt;
+        raidHafizasi.delete(id);
+        raidHafizasi.set(messageId, updated);
+        try { saveAllRaids(); }
+        catch (error) { raidHafizasi.delete(messageId); raidHafizasi.set(id, raid); throw error; }
+    }
+});
+const shareSchedule = createShareSchedule({ getRaids: getAllRaids });
+
 async function raidManuelOyuncuEkle(interaction) {
     await interaction.deferReply({ flags: [64] });
     const language = interactionLanguage(interaction);
@@ -1530,7 +1592,7 @@ async function raidManuelOyuncuEkle(interaction) {
     const className = interaction.options.getString('klas').trim();
     const raid = raidHafizasi.get(String(messageId));
     if (!raid) return interaction.editReply(t(language, 'raid.manual.not_found'));
-    if (isRaidClosed(raid)) return interaction.editReply(t(language, 'raid.manual.closed'));
+    if (raid.published === false || isRaidClosed(raid)) return interaction.editReply(t(language, 'raid.manual.closed'));
     const penalty = raidPenaltyStatus(user.id, messageId, true);
     if (penalty.blocked) return interaction.editReply(t(language, 'raid.manual.blocked', { user, reason: penaltyMessage(penalty, language) }));
 
@@ -1543,7 +1605,7 @@ async function raidManuelOyuncuEkle(interaction) {
 
     const notification = await sendManualRaidAddNotification(interaction.client, messageId, raid, user, result, raidMessage);
     const reply = result.overflow
-        ? t(language, 'raid.manual.overflow', { capacity: raid.capacity, user })
+        ? t(language, result.dpsLimitReached ? 'raid.manual.dps_overflow' : 'raid.manual.overflow', { capacity: result.dpsLimitReached ? dpsLimitForRaid(raid) : raid.capacity, user })
         : t(language, 'raid.manual.success', { user });
     return interaction.editReply(notification === 'failed'
         ? `${reply}\nOyuncu raid'e başarıyla eklendi ancak özel mesaj gönderilemedi.\n*The player was added successfully, but the direct message could not be delivered.*`
@@ -1554,11 +1616,19 @@ async function raidDuzenleKomutuYonet(interaction) {
     await interaction.deferReply({ flags: [64] });
     const language = interactionLanguage(interaction);
     const messageId = interaction.options.getString('id');
-    const raid = raidHafizasi.get(String(messageId));
+    let raid = raidHafizasi.get(String(messageId));
     if (!raid) return interaction.editReply(t(language, 'raid.manual.not_found'));
     if (raid.guildId && String(raid.guildId) !== String(interaction.guildId)) return interaction.editReply(t(language, 'common.no_permission'));
     if (!leaderOwnsRaid(interaction, raid) && !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return interaction.editReply(t(language, 'common.no_permission'));
 
+    if (raid.published === false && (publicationWorker.isBusy(String(messageId)) || raid.publicationAttempt)) return interaction.editReply('Publication is being reconciled. Please try again in a minute.');
+    if (interaction.options.getBoolean?.('cancel-scheduled')) {
+        if (raid.published !== false) return interaction.editReply('Delete the published registration message to remove this raid.');
+        try { raidMesajiSilindi(messageId); }
+        catch (error) { console.error('Scheduled raid cancellation failed:', error.message); return interaction.editReply('Failed to cancel scheduled raid. Please try again.'); }
+        return interaction.editReply('Scheduled raid cancelled.');
+    }
+    if (raid.published === false) raid = deepClone(raid);
     const newDay = interaction.options.getInteger('gun');
     const newMonth = interaction.options.getInteger('ay');
     const newTime = interaction.options.getString('saat');
@@ -1599,24 +1669,33 @@ async function raidDuzenleKomutuYonet(interaction) {
         raid.attendanceResult = null;
     }
     if (newDescription !== null) raid.aciklama = newDescription.trim();
-    saveRaid(messageId, raid);
-    await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
+    if (raid.published === false && dateChanges) { raid.publishAt = publicationTime(raid); delete raid.retryAt; }
+    try { saveRaid(messageId, raid); }
+    catch (error) { console.error('Raid edit could not be saved:', error.message); return interaction.editReply(t(language, 'common.error')); }
+    if (raid.published !== false) await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
     return interaction.editReply(t(language, 'raid.edit.success', { raidName: raid.zindan }));
 }
 
 const raidCreation = createRaidCreation({
     contents: zindanListesi,
     preferences: createTimePreferences(),
+    canManage,
+    schedule: async (interaction, data, session) => {
+        const id = session.token;
+        let raid = [...raidHafizasi.values()].find(record => record.raidId === id);
+        if (!raid) {
+            raid = { ...newRaidRecord(interaction, data, true), raidId: id, status: 'scheduled', published: false,
+                publishAt: publicationTime(data), createdAt: Math.floor(Date.now() / 1000) };
+            try { saveRaid(id, raid); }
+            catch (error) { raidHafizasi.delete(id); throw error; }
+        }
+        // Confirm persistence first. Immediate publication uses the same worker;
+        // Discord/network delays must not consume the interaction token lifetime.
+        if (raid.publishAt <= Date.now() / 1000) setImmediate(() => publicationWorker.publish(interaction.client, id).catch(console.error));
+        return scheduledConfirmation(raid);
+    },
     publish: async (interaction, data, session) => {
-        const raid = normalizeRaid({
-            ...data, capacity: capacityForType(data.contentType),
-            tarih: discordTarihMetniOlustur(data.unixZamani),
-            channelId: interaction.channelId, guildId: interaction.guildId,
-            creatorId: interaction.user.id, creatorMention: '<@' + interaction.user.id + '>',
-            displayLanguage: interactionLanguage(interaction),
-            tanklar: [], healerlar: [], dpsler: [], yedekler: [],
-            siradakiSira: 1, planOverrides: {}, planNeedsRefresh: true
-        });
+        const raid = newRaidRecord(interaction, data);
         // Retain a sent message if persistence fails, so retry saves it instead
         // of publishing another raid. Discord also deduplicates the nonce.
         if (!session.publishedMessage) session.publishedMessage = await sendEmojiSafe(interaction.channel, 'send', {
@@ -1922,6 +2001,8 @@ async function handlePlanInteraction(interaction) {
 async function raidSisteminiYonet(interaction) {
     interaction = emojiSafeInteraction(interaction);
     try {
+        const shareHandled = await shareSchedule.handle(interaction);
+        if (shareHandled !== null) return shareHandled;
         const creationHandled = await handleRaidCreation(interaction);
         if (creationHandled !== null) return creationHandled;
         const registrationHandled = await handleRegistration(interaction);
@@ -1933,7 +2014,8 @@ async function raidSisteminiYonet(interaction) {
         return await handlePlanInteraction(interaction);
     } catch (error) {
         console.error('Raid sisteminde hata oluştu:', error);
-        const payload = { content: t(interactionLanguage(interaction), 'common.error'), components: [] };
+        const englishSchedule = ['schedule', 'share-schedule'].includes(interaction.commandName) || /^raid_(schedule|share)_/.test(interaction.customId || '');
+        const payload = { content: englishSchedule ? 'The operation failed. Please try again.' : t(interactionLanguage(interaction), 'common.error'), components: [] };
         if (interaction.deferred || interaction.replied) return interaction.editReply(payload).catch(replyError => console.error('Raid error reply failed:', replyError));
         return privateReply(interaction, payload).catch(replyError => console.error('Raid error reply failed:', replyError));
     }
@@ -1944,6 +2026,7 @@ loadProfiles();
 loadAttendance();
 
 module.exports = {
+    scheduleCommand, shareScheduleCommand,
     raidKomutu,
     raidOyuncuEkleKomutu,
     raidDuzenleKomutu,
@@ -1973,6 +2056,8 @@ module.exports = {
         isRaidClosed,
         contentTypeFromValue,
         capacityForType,
+        dpsLimitForRaid,
+        hasRaidRoleSpace,
         rosterFingerprint,
         planInputFingerprint,
         planPublicationAction,

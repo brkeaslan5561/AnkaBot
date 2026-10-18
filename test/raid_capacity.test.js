@@ -18,6 +18,52 @@ function user(id) {
     return { id: String(id) };
 }
 
+for (const [code, limit] of [['MSOD', 7], ['MSH', 6]]) {
+    test(`${code}: DPS overflow automatically reserves players while leaving support slots available`, () => {
+        const raid = { ...emptyRaid('trial'), zindanKodu: code, zindan: 'Renamed raid' };
+        for (let id = 1; id <= limit; id++) {
+            assert.equal(_test.registerParticipant(raid, user(id), `Player ${id}`, 'dps', 'Wizard', {}).overflow, false);
+        }
+        const extra = _test.registerParticipant(raid, user('extra'), 'Extra', 'dps', 'Wizard', {});
+        assert.equal(extra.overflow, true);
+        assert.equal(extra.dpsLimitReached, true);
+        assert.equal(raid.dpsler.length, limit);
+        assert.equal(raid.yedekler[0].intendedRole, 'dps');
+        assert.equal(_test.registerParticipant(raid, user('tank'), 'Tank', 'tank', 'Fighter', {}).overflow, false);
+        assert.match(_test.raidEmbedOlustur(raid).toJSON().fields[2].name, new RegExp(`${limit}/${limit}`));
+        const reloaded = _test.normalizeRaid(JSON.parse(JSON.stringify(raid)));
+        assert.equal(_test.registerParticipant(reloaded, user('another'), 'Another', 'dps', 'Wizard', {}).record.role, 'yedek');
+    });
+
+    test(`${code}: role changes, repeated signups and profile updates cannot bypass or consume extra DPS slots`, () => {
+        const raid = { ...emptyRaid('trial'), zindanKodu: code };
+        for (let id = 1; id <= limit; id++) _test.registerParticipant(raid, user(id), `Player ${id}`, 'dps', 'Wizard', {});
+        const update = _test.registerParticipant(raid, user(1), 'Updated', 'dps', 'Wizard', {});
+        assert.equal(update.record.role, 'dps');
+        assert.equal(raid.dpsler.length, limit);
+        _test.registerParticipant(raid, user('tank'), 'Tank', 'tank', 'Fighter', {});
+        assert.equal(_test.registerParticipant(raid, user('tank'), 'Tank', 'dps', 'Fighter', {}).record.role, 'yedek');
+        _test.registerParticipant(raid, user(1), 'Player 1', 'heal', 'Cleric', {});
+        const profile = _test.registerParticipant(raid, user('tank'), 'Tank', 'dps', 'Fighter', {}, { preservePlacement: true });
+        assert.equal(profile.record.role, 'yedek');
+        assert.equal(_test.registerParticipant(raid, user('tank'), 'Tank', 'dps', 'Fighter', {}).record.role, 'dps');
+        assert.equal(raid.dpsler.length, limit);
+    });
+}
+
+test('DPS limits recognize legacy names and leave other raids and existing over-limit rosters intact', () => {
+    assert.equal(_test.dpsLimitForRaid({ zindan: 'MSOD (Master Shackles of Divinity)' }), 7);
+    assert.equal(_test.dpsLimitForRaid({ zindan: 'Master Soul Harvester' }), 6);
+    assert.equal(_test.dpsLimitForRaid({ zindanKodu: 'MZC' }), Infinity);
+    const raid = { ...emptyRaid('trial'), zindanKodu: 'MZC' };
+    for (let id = 1; id <= 8; id++) _test.registerParticipant(raid, user(id), `Player ${id}`, 'dps', 'Wizard', {});
+    raid.zindanKodu = 'MSH';
+    _test.normalizeRaid(raid);
+    assert.equal(raid.dpsler.length, 8);
+    assert.equal(_test.registerParticipant(raid, user(1), 'Updated', 'dps', 'Wizard', {}).record.role, 'dps');
+    assert.equal(_test.registerParticipant(raid, user(9), 'New', 'dps', 'Wizard', {}).record.role, 'yedek');
+});
+
 test('5 kişilik zindan dolunca sonraki oyuncu otomatik yedeğe alınır', () => {
     const raid = emptyRaid('dungeon');
     let lastResult;

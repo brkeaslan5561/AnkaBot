@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const discord = require('discord.js');
 const { t } = require('../localization');
-const { _test: { registerParticipant } } = require('../raid');
+const { _test: { registerParticipant, hasRaidRoleSpace } } = require('../raid');
 const source = fs.readFileSync(path.join(__dirname, '..', 'raid.js'), 'utf8');
 const between = (start, end) => source.slice(source.indexOf(start), source.indexOf(end));
 
@@ -21,7 +21,7 @@ function harness() {
         state.sent.push({ id, payload });
     } }) } };
     const deps = {
-        ...discord, t, raidHafizasi: new Map([['message', raid]]),
+        ...discord, t, hasRaidRoleSpace, raidHafizasi: new Map([['message', raid]]),
         mainCount: r => r.tanklar.length + r.healerlar.length + r.dpsler.length,
         saveRaid: () => state.events.push('saved'), markPlanDirty: () => {},
         updateRaidCard: async () => {}, languageForUser: () => 'tr',
@@ -61,6 +61,19 @@ test('reserve request leaves the slot empty indefinitely until approval', async 
     assert.equal(h.raid.yedekler.length, 1);
     assert.equal(h.sent.length, 1);
     assert.match(h.sent[0].payload.content, /Siz onaylamadıkça/);
+});
+
+for (const [code, limit] of [['MSOD', 7], ['MSH', 6]]) test(`${code}: stale leader approval cannot promote beyond the DPS limit`, async () => {
+    const h = harness(); h.raid.zindanKodu = code;
+    for (let id = 1; id <= limit; id++) registerParticipant(h.raid, { id: String(id) }, `Player ${id}`, 'dps', 'Wizard', {});
+    h.raid.pendingReserve = { role: 'dps', candidateUserId: 'reserve' };
+    await h.act('accept');
+    assert.equal(h.raid.dpsler.length, limit);
+    assert.equal(h.raid.yedekler.length, 1);
+    h.raid.dpsler.pop();
+    await h.act('accept');
+    assert.equal(h.raid.dpsler.length, limit);
+    assert.equal(h.raid.yedekler.length, 0);
 });
 
 test('failed leader DM never promotes the reserve', async context => {

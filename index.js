@@ -1,8 +1,10 @@
+const { acquireProcessLock } = require('./process_lock');
+acquireProcessLock(require('node:path').join(__dirname, '.ankabot.lock'));
 const { Client, GatewayIntentBits, Partials, EmbedBuilder, SlashCommandBuilder, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { REST } = require('@discordjs/rest');
 const config = require('./config.json');
 const fs = require('fs');
-const { raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidZamanlayicisiniBaslat, raidMesajiSilindi, raidMesajKayitlariniSil } = require('./raid.js');
+const { scheduleCommand, shareScheduleCommand, raidKomutu, raidSisteminiYonet, raidOyuncuEkleKomutu, raidDuzenleKomutu, raidDuzenleKomutuYonet, raidAutocompleteYonet, raidManuelOyuncuEkle, raidZamanlayicisiniBaslat, raidMesajiSilindi, raidMesajKayitlariniSil } = require('./raid.js');
 const { syncCatalogEmojis } = require('./raid_emojis.js');
 const { announcementCommand, handleAnnouncementInteraction } = require('./announcement.js');
 const { configureLocalization, rememberInteractionLocale } = require('./localization.js');
@@ -41,6 +43,8 @@ const commands = [
         .setDescription('Oyuncuların zindan ve ekipman ihtiyaçlarını listeler.'),
 
     raidKomutu,
+    scheduleCommand,
+    shareScheduleCommand,
     raidOyuncuEkleKomutu,
     raidDuzenleKomutu,
     announcementCommand
@@ -132,7 +136,7 @@ client.on('interactionCreate', async interaction => {
     // RAID SİSTEMİ YÖNLENDİRMESİ (TÜM ETKİLEŞİMLERİ KAPSAYACAK ŞEKİLDE DÜZELTİLDİ)
     //----------------------------------------------------
     const isRaidInteraction = 
-        (interaction.isChatInputCommand() && interaction.commandName === 'raid-oluştur') || 
+        (interaction.isChatInputCommand() && ['raid-oluştur', 'schedule', 'share-schedule'].includes(interaction.commandName)) ||
         (interaction.isModalSubmit() && interaction.customId.startsWith('raid_')) ||
         (interaction.isButton() && interaction.customId.startsWith('raid_')) ||
         (interaction.isStringSelectMenu() && interaction.customId.startsWith('raid_'));

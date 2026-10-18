@@ -1,5 +1,9 @@
 # AnkaBot
 
+For `/schedule` and `/share-schedule`, see [Scheduled raids and shared schedules](SCHEDULING.md), including persistence, permissions, tests, command registration, and EC2 restart instructions.
+
+MSOD allows up to 7 DPS in the main roster; MSH allows up to 6. Additional DPS signups and manual additions automatically join reserves, even when support slots remain open. Reserve promotions respect the same limits. Existing roster members are retained.
+
 Discord üzerinde zindan/trial kaydı, kalıcı oyuncu ekipman profili ve otomatik raid planı oluşturan bot.
 
 ## Bu sürümde neler var?

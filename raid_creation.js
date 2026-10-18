@@ -2,11 +2,19 @@ const { randomBytes } = require('node:crypto');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, escapeMarkdown } = require('discord.js');
 const { validateTimeZone, validateLocale, localeForZone, hourFormat, parseTime, formatLocalTime, localCandidates, timeSnapshot } = require('./raid_time');
 
-// Reuse the existing locale bundles; creation always shows Turkish then English.
+// Existing creation stays bilingual; scheduling explicitly requests English.
 const { t } = require('./localization');
 const translated = (language, key, variables) => t(language, `raid.creation.ui.${key}`, variables);
-const text = key => `${translated('tr', key)} / ${translated('en', key)}`;
-const lines = key => `**${translated('tr', key)}**\n*${translated('en', key)}*`;
+const schedulingText = {
+    create: 'Schedule Raid', choose: 'Choose the raid you want to schedule.',
+    reviewPrompt: 'Review the raid details before scheduling.',
+    expired: 'This screen expired. Start again with /schedule.',
+    cancelled: 'Raid scheduling cancelled.',
+    localeError: 'Enter a valid regional locale (e.g. en-US, en-GB).'
+};
+const englishText = (key, s) => s?.scheduled && schedulingText[key] || translated('en', key);
+const text = (key, s) => s?.englishOnly ? englishText(key, s) : `${translated('tr', key)} / ${translated('en', key)}`;
+const lines = (key, s) => s?.englishOnly ? englishText(key, s) : `**${translated('tr', key)}**\n*${translated('en', key)}*`;
 const COMMON_ZONES = [
     ['Türkiye', 'Europe/Istanbul'], ['United Kingdom', 'Europe/London'], ['Germany', 'Europe/Berlin'],
     ['United States (New York)', 'America/New_York'], ['United States (Los Angeles)', 'America/Los_Angeles'],
@@ -15,12 +23,12 @@ const COMMON_ZONES = [
 ];
 const LEGACY_CREATION_IDS = new Set(['raid_content_select', 'raid_custom_type', 'raid_custom_name_modal', 'raid_date_day_1', 'raid_date_day_2', 'raid_date_month', 'raid_date_time', 'raid_description_modal']);
 const row = (...components) => new ActionRowBuilder().addComponents(...components);
-const id = (s, action) => `raid_create_${s.token}_${action}`;
-const button = (s, action, key, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(id(s, action)).setLabel(translated('en', key)).setStyle(style);
+const id = (s, action) => `${s.scheduled ? 'raid_schedule' : 'raid_create'}_${s.token}_${action}`;
+const button = (s, action, key, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(id(s, action)).setLabel(s.scheduled && action === 'confirm' ? 'Schedule Raid' : translated('en', key)).setStyle(style);
 const THEME = { color: '#5865F2', brand: 'Anka Bot' };
-const zoneLabel = zone => {
+const zoneLabel = (zone, s) => {
     const country = COMMON_ZONES.find(([, value]) => value === zone)?.[0];
-    return country ? `${country} — ${zone}` : zone;
+    return country ? `${s?.englishOnly && country === 'Türkiye' ? 'Turkey' : country} — ${zone}` : zone;
 };
 function screen(s, step, title, stage, body = '') {
     const embed = new EmbedBuilder().setColor(THEME.color).setTitle(title)
@@ -28,23 +36,23 @@ function screen(s, step, title, stage, body = '') {
         .setDescription(`*${translated('en', 'step', { step })} · ${translated('en', stage)}*${body ? `\n\n${body}` : ''}`);
     return embed;
 }
-const field = (key, value, inline = false) => ({
-    name: '\u200b', value: `**${translated('tr', key)}** / *${translated('en', key)}*\n${value}`, inline
+const field = (s, key, value, inline = false) => ({
+    name: '\u200b', value: `${s.englishOnly ? `**${translated('en', key)}**` : `**${translated('tr', key)}** / *${translated('en', key)}*`}\n${value}`, inline
 });
 const payload = (embed, components = []) => ({ content: '', embeds: [embed], components, allowedMentions: { parse: [] } });
 function contentPayload(s, contents) {
-    const embed = screen(s, 1, text('create'), 'selectRaid', lines('choose'));
-    return payload(embed, [row(new StringSelectMenuBuilder().setCustomId(id(s, 'content')).setPlaceholder(text('selectRaid')).addOptions(
-        contents.map(item => ({ label: item.value === 'custom' ? text('custom') : item.label, value: item.value,
-            description: text(item.value === 'custom' ? 'custom' : item.contentType === 'dungeon' ? 'dungeon' : 'trial'),
+    const embed = screen(s, 1, text('create', s), 'selectRaid', lines('choose', s));
+    return payload(embed, [row(new StringSelectMenuBuilder().setCustomId(id(s, 'content')).setPlaceholder(text('selectRaid', s)).addOptions(
+        contents.map(item => ({ label: item.value === 'custom' ? text('custom', s) : item.label, value: item.value,
+            description: text(item.value === 'custom' ? 'custom' : item.contentType === 'dungeon' ? 'dungeon' : 'trial', s),
             default: item.value === s.code, ...(item.emoji ? { emoji: item.emoji } : {}) }))
     )), row(button(s, 'cancel', 'cancel'))]);
 }
 function typePayload(s) {
-    return payload(screen(s, 1, text('create'), 'selectRaid', lines('chooseType')), [
-        row(new StringSelectMenuBuilder().setCustomId(id(s, 'type')).setPlaceholder(text('type')).addOptions(
-            { label: text('dungeon'), value: 'dungeon', default: s.type === 'dungeon' },
-            { label: text('trial'), value: 'trial', default: s.type === 'trial' }
+    return payload(screen(s, 1, text('create', s), 'selectRaid', lines('chooseType', s)), [
+        row(new StringSelectMenuBuilder().setCustomId(id(s, 'type')).setPlaceholder(text('type', s)).addOptions(
+            { label: text('dungeon', s), value: 'dungeon', default: s.type === 'dungeon' },
+            { label: text('trial', s), value: 'trial', default: s.type === 'trial' }
         )), row(button(s, 'back', 'back'), button(s, 'cancel', 'cancel'))
     ]);
 }
@@ -55,13 +63,13 @@ const input = (key, label, placeholder, value, required = true, max = 100) => {
     return row(item);
 };
 function settings(s) {
-    const zones = COMMON_ZONES.map(([country, zone]) => ({ label: `${country} – ${zone}`.slice(0, 100), value: zone, default: zone === s.zone }));
+    const zones = COMMON_ZONES.map(([country, zone]) => ({ label: `${s.englishOnly && country === 'Türkiye' ? 'Turkey' : country} – ${zone}`.slice(0, 100), value: zone, default: zone === s.zone }));
     if (s.zone && !zones.some(option => option.value === s.zone)) zones.push({ label: s.zone, value: s.zone, default: true });
-    zones.push({ label: text('other'), value: 'other' });
-    zones.push({ label: text('region'), value: 'region' });
-    const components = [row(new StringSelectMenuBuilder().setCustomId(id(s, 'zone')).setPlaceholder(text('zone')).addOptions(zones)),
-        row(new StringSelectMenuBuilder().setCustomId(id(s, 'format')).setPlaceholder(text('format')).addOptions(
-            ['auto', '24', '12'].map((value, i) => ({ label: text(['auto', 'twentyfour', 'twelve'][i]), value, default: s.format === value }))
+    zones.push({ label: text('other', s), value: 'other' });
+    zones.push({ label: text('region', s), value: 'region' });
+    const components = [row(new StringSelectMenuBuilder().setCustomId(id(s, 'zone')).setPlaceholder(text('zone', s)).addOptions(zones)),
+        row(new StringSelectMenuBuilder().setCustomId(id(s, 'format')).setPlaceholder(text('format', s)).addOptions(
+            ['auto', '24', '12'].map((value, i) => ({ label: text(['auto', 'twentyfour', 'twelve'][i], s), value, default: s.format === value }))
         ))];
     if (hourFormat(s.format, s.locale) === '12') components.push(row(new StringSelectMenuBuilder()
         .setCustomId(id(s, 'period')).setPlaceholder('AM / PM').addOptions(
@@ -71,52 +79,56 @@ function settings(s) {
         row(button(s, 'back', 'back'), button(s, 'cancel', 'cancel')));
     const format = hourFormat(s.format, s.locale);
     const summary = s.zone
-        ? `${zoneLabel(s.zone)}\n${text(format === '12' ? 'twelve' : 'twentyfour')}${s.time ? ` · ${formatLocalTime(s.time, format)}` : `\n${lines('noTime')}`}`
-        : lines('unknown');
-    return payload(screen(s, 2, translated('en', 'timeSettings'), 'timeSettings', lines('setup'))
-        .addFields(field('current', summary)), components);
+        ? `${zoneLabel(s.zone, s)}\n${text(format === '12' ? 'twelve' : 'twentyfour', s)}${s.time ? ` · ${formatLocalTime(s.time, format)}` : `\n${lines('noTime', s)}`}`
+        : lines('unknown', s);
+    return payload(screen(s, 2, translated('en', 'timeSettings'), 'timeSettings', lines('setup', s))
+        .addFields(field(s, 'current', summary)), components);
 }
 function detailsModal(s) {
     const format = hourFormat(s.format, s.locale);
     const displayed = s.timeInput ?? (s.time ? formatLocalTime(s.time, format) : null);
-    const description = new TextInputBuilder().setCustomId('description').setLabel(text('description')).setPlaceholder(text('optional')).setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(false);
+    const description = new TextInputBuilder().setCustomId('description').setLabel(text('description', s)).setPlaceholder(text('optional', s)).setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(false);
     if (s.description) description.setValue(s.description);
     return new ModalBuilder().setCustomId(id(s, 'submit')).setTitle(`${translated('en', 'details')} · ${translated('en', 'step', { step: 3 })}`).addComponents(
-        input('name', text('name'), null, s.name, true, 80),
-        input('date', text('date'), 'YYYY-MM-DD', s.date, true, 10),
-        input('time', `${text('time')} · ${format === '12' ? 'AM/PM' : '24h'}`, format === '12' ? `9:00 ${s.period}` : '21:00', displayed, true, 12),
+        input('name', text('name', s), null, s.name, true, 80),
+        input('date', text('date', s), 'YYYY-MM-DD', s.date, true, 10),
+        input('time', `${text('time', s)} · ${format === '12' ? 'AM/PM' : '24h'}`, format === '12' ? `9:00 ${s.period}` : '21:00', displayed, true, 12),
         row(description)
     );
 }
 function confirmation(s) {
-    const dateText = new Intl.DateTimeFormat(s.locale, { timeZone: s.zone, dateStyle: 'long' }).format(new Date(s.candidates[0] * 1000));
+    const dateText = new Intl.DateTimeFormat(s.englishOnly ? 'en-US' : s.locale, { timeZone: s.zone, dateStyle: 'long' }).format(new Date(s.candidates[0] * 1000));
     const fields = [
-        field('date', `${dateText}\n${s.timestamp ? `<t:${s.timestamp}:F>` : lines('fold')}`),
-        field('time', formatLocalTime(s.time, hourFormat(s.format, s.locale))),
-        field('zone', zoneLabel(s.zone))
+        field(s, 'date', `${dateText}\n${s.timestamp ? `<t:${s.timestamp}:F>` : lines('fold', s)}`),
+        field(s, 'time', formatLocalTime(s.time, hourFormat(s.format, s.locale))),
+        field(s, 'zone', zoneLabel(s.zone, s))
     ];
-    const embed = screen(s, 4, translated('en', 'review'), 'finalReview', `**${escapeMarkdown(s.name)}**\n\n${lines('reviewPrompt')}`).addFields(fields);
-    if (s.description) embed.addFields(field('description', s.description));
+    const embed = screen(s, 4, translated('en', 'review'), 'finalReview', `**${escapeMarkdown(s.name)}**\n\n${lines('reviewPrompt', s)}`).addFields(fields);
+    if (s.description) embed.addFields(field(s, 'description', s.description));
     const components = [];
-    if (s.candidates.length > 1) components.push(row(new StringSelectMenuBuilder().setCustomId(id(s, 'fold')).setPlaceholder(text('foldChoice')).addOptions(
+    if (s.candidates.length > 1) components.push(row(new StringSelectMenuBuilder().setCustomId(id(s, 'fold')).setPlaceholder(text('foldChoice', s)).addOptions(
         s.candidates.map(timestamp => ({ label: `${new Date(timestamp * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC`, value: String(timestamp), default: timestamp === s.timestamp }))
     )));
     components.push(row(button(s, 'confirm', 'confirm', ButtonStyle.Success).setDisabled(!s.timestamp)),
         row(button(s, 'details', 'back'), button(s, 'settings', 'timeSettings'), button(s, 'cancel', 'cancel')));
     return payload(embed, components);
 }
-function createRaidCreation({ contents, preferences, publish, now = () => Date.now() }) {
+function createRaidCreation({ contents, preferences, publish, schedule, canManage, now = () => Date.now() }) {
     const sessions = new Map();
-    const errorReply = (i, key) => i.reply({ content: lines(key), flags: [64] });
+    const errorReply = (i, key) => {
+        const englishOnly = i.commandName === 'schedule' || i.customId?.startsWith('raid_schedule_');
+        return i.reply({ content: englishOnly && key === 'failed' ? 'Failed to schedule raid. Please try again.' : lines(key, { englishOnly, scheduled: englishOnly }), flags: [64] });
+    };
     async function handle(i) {
-        const starting = i.isChatInputCommand() && i.commandName === 'raid-oluştur';
+        const starting = i.isChatInputCommand() && ['raid-oluştur', 'schedule'].includes(i.commandName);
         if (LEGACY_CREATION_IDS.has(i.customId)) return errorReply(i, 'expired');
-        if (!starting && !i.customId?.startsWith('raid_create_')) return null;
+        if (!starting && !/^raid_(create|schedule)_/.test(i.customId || '')) return null;
+        if ((i.commandName === 'schedule' || i.customId?.startsWith('raid_schedule_')) && !canManage?.(i)) return i.reply({ content: 'You need Manage Server permission to schedule raids.', flags: [64] });
         if (starting) {
             if (!i.guildId) return errorReply(i, 'guild');
             for (const [key, session] of sessions) if (now() - session.created > 30 * 60_000 && !session.busy) sessions.delete(key);
             const preference = preferences.get(i.user.id);
-            const s = { token: randomBytes(9).toString('hex'), userId: i.user.id, channelId: i.channelId, guildId: i.guildId, created: now(), stage: 'content',
+            const s = { scheduled: i.commandName === 'schedule', englishOnly: i.commandName === 'schedule', token: randomBytes(9).toString('hex'), userId: i.user.id, channelId: i.channelId, guildId: i.guildId, created: now(), stage: 'content',
                 zone: preference?.preferredTimeZone || null, format: preference?.preferredHourFormat || 'auto',
                 locale: preference?.preferredLocale || (i.locale === 'tr' ? 'tr-TR' : i.locale || 'en-GB'), period: 'PM',
                 avatar: i.client?.user?.displayAvatarURL?.({ extension: 'png', size: 64 }) };
@@ -127,9 +139,9 @@ function createRaidCreation({ contents, preferences, publish, now = () => Date.n
         const s = sessions.get(token);
         if (!s || s.userId !== i.user.id || s.channelId !== i.channelId || s.guildId !== i.guildId || now() - s.created > 30 * 60_000) return errorReply(i, 'expired');
         if (s.busy) return errorReply(i, 'busy');
-        if (s.publicationStarted && action !== 'confirm') return errorReply(i, 'busy');
+        if (s.publicationStarted && !['confirm', 'immediate'].includes(action)) return errorReply(i, 'busy');
         try {
-            if (action === 'cancel') { sessions.delete(token); return i.update({ content: lines('cancelled'), embeds: [], components: [] }); }
+            if (action === 'cancel') { sessions.delete(token); return i.update({ content: lines('cancelled', s), embeds: [], components: [] }); }
             if (action === 'back') { s.stage = 'content'; return i.update(contentPayload(s, contents)); }
             if (action === 'content') {
                 if (s.stage !== 'content') return errorReply(i, 'expired');
@@ -149,9 +161,9 @@ function createRaidCreation({ contents, preferences, publish, now = () => Date.n
             if (action === 'settings') { s.stage = 'settings'; return i.update(settings(s)); }
             if (['zone', 'format', 'period', 'region', 'regionSubmit'].includes(action) && s.stage !== 'settings') return errorReply(i, 'expired');
             if (action === 'zone' && ['other', 'region'].includes(i.values[0]) || action === 'region') {
-                return i.showModal(new ModalBuilder().setCustomId(id(s, 'regionSubmit')).setTitle(text('zone')).addComponents(
-                    input('zone', text('zone'), 'Asia/Tokyo', s.zone, true, 100),
-                    input('locale', text('locale'), 'en-US / tr-TR / de-DE', action === 'region' || i.values?.[0] === 'region' ? s.locale : null, false, 35)
+                return i.showModal(new ModalBuilder().setCustomId(id(s, 'regionSubmit')).setTitle(text('zone', s)).addComponents(
+                    input('zone', text('zone', s), 'Asia/Tokyo', s.zone, true, 100),
+                    input('locale', text('locale', s), s.englishOnly ? 'en-US / en-GB' : 'en-US / tr-TR / de-DE', action === 'region' || i.values?.[0] === 'region' ? s.locale : null, false, 35)
                 ));
             }
             if (action === 'zone' || action === 'regionSubmit') {
@@ -214,22 +226,30 @@ function createRaidCreation({ contents, preferences, publish, now = () => Date.n
                 s.timestamp = candidate;
                 return i.update(confirmation(s));
             }
-            if (action === 'confirm') {
+            if (action === 'confirm' || action === 'immediate') {
                 if (s.stage !== 'preview' || !s.timestamp || !s.candidates?.includes(s.timestamp)) return errorReply(i, 'expired');
                 if (s.timestamp <= now() / 1000) return errorReply(i, 'past');
+                if (s.scheduled && s.timestamp - 86400 <= now() / 1000 && !s.immediateConfirmed) {
+                    if (action !== 'immediate' || s.immediateTimestamp !== s.timestamp) {
+                        s.immediateTimestamp = s.timestamp;
+                        return i.update({ content: 'This raid starts in less than 24 hours. Its registration message will be published immediately. Confirm to continue.', embeds: [],
+                            components: [row(new ButtonBuilder().setCustomId(id(s, 'immediate')).setLabel('Confirm Immediate Publication').setStyle(ButtonStyle.Success), button(s, 'cancel', 'cancel'))] });
+                    }
+                    s.immediateConfirmed = true;
+                }
                 s.busy = true;
                 await i.deferUpdate();
                 const snapshot = timeSnapshot(s.date, s.time, s.zone, s.format, s.locale, s.timestamp);
                 s.publicationStarted = true;
-                await publish(i, { ...snapshot, zindan: s.name, zindanKodu: s.code === 'custom' ? s.name : s.code, contentType: s.type, aciklama: s.description }, s);
+                const result = await (s.scheduled ? schedule : publish)(i, { ...snapshot, zindan: s.name, zindanKodu: s.code === 'custom' ? s.name : s.code, contentType: s.type, aciklama: s.description }, s);
                 sessions.delete(token);
-                return i.editReply({ content: lines('success'), embeds: [], components: [] });
+                return i.editReply(s.scheduled ? { content: '', embeds: [result], components: [] } : { content: lines('success'), embeds: [], components: [] });
             }
             return errorReply(i, 'expired');
         } catch (error) {
             console.error('Raid creation failed:', error.message);
             const key = ['time12', 'time24'].includes(error.message) ? error.message : error.message === 'date' ? 'dateError' : 'failed';
-            if (i.deferred) return i.editReply({ ...confirmation(s), content: lines(key), components: [row(button(s, 'confirm', 'confirm', ButtonStyle.Success))] });
+            if (i.deferred) return i.editReply({ ...confirmation(s), content: s.scheduled ? 'Failed to schedule raid. Please try again.' : lines(key), components: [row(button(s, 'confirm', 'confirm', ButtonStyle.Success))] });
             return errorReply(i, key);
         } finally { s.busy = false; }
     }
