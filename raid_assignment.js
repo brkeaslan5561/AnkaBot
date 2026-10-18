@@ -104,8 +104,19 @@ function artifactScore(player, item, playerIndex) {
     return ASSIGNMENT_BASE + Math.round(item.buff * 1_000) + roleBonus + (100 - item.rank) * 10 + (100 - playerIndex);
 }
 
-function assignArtifacts(players) {
-    const slots = groupSlots(artifacts);
+function availableSlots(slots, reserved = []) {
+    const used = new Map();
+    for (const item of reserved) used.set(item.group, (used.get(item.group) || 0) + 1);
+    return slots.filter(slot => {
+        const remaining = used.get(slot.group) || 0;
+        if (!remaining) return true;
+        used.set(slot.group, remaining - 1);
+        return false;
+    });
+}
+
+function assignArtifacts(players, reserved = []) {
+    const slots = availableSlots(groupSlots(artifacts), reserved);
     return assignUnique(players, slots, (player, slot, _slotIndex, playerIndex) => {
         const candidate = bestOwnedItem(player, 'artifacts', slot, item => artifactScore(player, item, playerIndex));
         if (!candidate) return null;
@@ -113,7 +124,7 @@ function assignArtifacts(players) {
     });
 }
 
-function assignMounts(players) {
+function assignMounts(players, reserved = []) {
     const result = new Map();
     const dpsMounts = mounts.filter(item => item.kind === 'dps').sort((a, b) => a.rank - b.rank);
     const supportPlayers = [];
@@ -127,10 +138,10 @@ function assignMounts(players) {
         }
     }
 
-    const supportSlots = mounts
+    const supportSlots = availableSlots(mounts
         .filter(item => item.kind === 'debuff')
         .sort((a, b) => a.rank - b.rank)
-        .map(item => ({ id: item.group, group: item.group, items: [item] }));
+        .map(item => ({ id: item.group, group: item.group, items: [item] })), reserved);
 
     const supportAssignments = assignUnique(supportPlayers, supportSlots, (player, slot, _slotIndex, playerIndex) => {
         const item = slot.items[0];
@@ -174,8 +185,8 @@ function companionScore(player, item, slot, contentType, playerIndex) {
     return score;
 }
 
-function assignCompanions(players, contentType) {
-    const slots = companionSlots(contentType);
+function assignCompanions(players, contentType, reserved = []) {
+    const slots = availableSlots(companionSlots(contentType), reserved);
     return assignUnique(players, slots, (player, slot, _slotIndex, playerIndex) => {
         const candidate = bestOwnedItem(
             player,
@@ -253,6 +264,8 @@ function applyOverrides(plan, overrides, players, contentType, language = 'tr') 
     const playerMap = new Map(players.map(player => [String(player.userId), player]));
     const rowMap = new Map(plan.rows.map(row => [String(row.userId), row]));
     const overrideWarnings = [];
+    const pinned = { artifact: new Set(), mount: new Set(), companion: new Set() };
+    const displaced = new Map();
     const pack = auras.find(item => item.id === 'pack_tactics');
     const protectedTanks = new Set(players
         .filter(player => roleOf(player) === 'tank' && owns(player, 'auras', pack))
@@ -274,6 +287,7 @@ function applyOverrides(plan, overrides, players, contentType, language = 'tr') 
 
             if (requestedValue === null || requestedValue === '') {
                 row[category] = null;
+                pinned[category]?.add(String(userId));
                 continue;
             }
 
@@ -296,14 +310,51 @@ function applyOverrides(plan, overrides, players, contentType, language = 'tr') 
             if (clearable.length < mustClear) continue;
             for (let index = 0; index < mustClear; index += 1) {
                 clearable[index][category] = null;
-                overrideWarnings.push(t(language, 'raid.assignment.override_conflict', { player: clearable[index].displayName, value: requestedValue }));
+                pinned[category]?.delete(String(clearable[index].userId));
+                displaced.set(`${clearable[index].userId}:${category}`, { row: clearable[index], category, requestedValue });
             }
             row[category] = item.name;
+            pinned[category]?.add(String(userId));
         }
     }
 
+    // Reserve the leader's explicit choices, then solve the remaining slots
+    // again. This can move an automatic assignment to free an owned alternative
+    // for a displaced player, without duplicates or invented inventory.
+    for (const category of ['artifact', 'mount', 'companion']) {
+        if (![...displaced.values()].some(entry => entry.category === category)) continue;
+        const info = categoryInfo(category);
+        const remaining = players.filter(player => !pinned[category].has(String(player.userId)));
+        const reserved = plan.rows.filter(row => pinned[category].has(String(row.userId)) && row[category])
+            .map(row => findCatalogItem(info.catalog, row[category])).filter(Boolean);
+        const assignments = category === 'artifact' ? assignArtifacts(remaining, reserved)
+            : category === 'mount' ? assignMounts(remaining, reserved) : assignCompanions(remaining, contentType, reserved);
+        for (const row of plan.rows) if (!pinned[category].has(String(row.userId))) row[category] = assignments.get(row.userId) || null;
+    }
+    for (const { row, category, requestedValue } of displaced.values()) {
+        if (!row[category]) overrideWarnings.push(t(language, 'raid.assignment.override_conflict', { player: row.displayName, value: requestedValue }));
+    }
     plan.overrideWarnings = overrideWarnings;
     return plan;
+}
+
+function setRaidOverride(raid, players, userId, category, value) {
+    const info = categoryInfo(category);
+    const player = players.find(entry => String(entry.userId) === String(userId));
+    if (!info || !player) throw new Error('Invalid raid plan assignment');
+    const item = value == null ? null : findCatalogItem(info.catalog, value);
+    if (value != null && (!item || !owns(player, info.inventory, item))) throw new Error('The player does not own this item');
+    raid.planOverrides ||= {};
+    if (item) {
+        const conflicts = Object.entries(raid.planOverrides).filter(([id, choices]) => id !== String(userId) &&
+            players.some(entry => String(entry.userId) === id) && findCatalogItem(info.catalog, choices[category])?.group === item.group);
+        const count = Math.max(0, conflicts.length - assignmentLimit(category, item, roleOf(player), raid.contentType) + 1);
+        // Removing an older explicit choice makes that player eligible for
+        // automatic refill. A deliberate "empty" selection is kept elsewhere.
+        for (const [id] of conflicts.slice(0, count)) delete raid.planOverrides[id][category];
+    }
+    raid.planOverrides[String(userId)] ||= {};
+    raid.planOverrides[String(userId)][category] = item?.name || null;
 }
 
 function buildWarnings(rows, capacity, overrideWarnings = [], language = 'tr') {
@@ -362,6 +413,7 @@ function assignRaid(raid, players, overrides = null, language = 'tr') {
 module.exports = {
     assignRaid,
     applyOverrides,
+    setRaidOverride,
     assignmentLimit,
     buildWarnings,
     roleOf,

@@ -70,6 +70,11 @@ function harness() {
         generatePlans: raid => { const plans = plansFor(raid, data.players); raid.plan = plans.tr; return plans; },
         render: async () => { renders++; events.push({ kind: 'render' }); return Buffer.from(`png-${renders}`); },
         save: (_id, raid) => events.push({ kind: 'save', approved: raid.planApproved }),
+        share: async (_client, _id, _raid, prepared) => {
+            assert.ok(prepared.isCurrent());
+            events.push({ kind: 'share', prepared });
+            return { id: 'public-plan' };
+        },
         openEditor: async interaction => { await interaction.reply({ content: 'editor' }); return message('editor'); },
         setAssignment: (raid, userId, category, value) => {
             raid.planOverrides[userId] ||= {};
@@ -107,7 +112,7 @@ test('10/10 uyarısız embed, iki sütun, PNG ve iki dilli butonlar geçerli', (
     assert.match(json.footer.text, /Gerekirse.*\nYou can/);
     assert.ok(!json.fields.some(field => /Warnings|uyarı/i.test(field.name)));
     assert.deepEqual(planActionRow('101').toJSON().components.map(b => [b.custom_id, b.style, b.label]), [
-        ['raid_plan_approve_101', 3, 'Onayla / Approve'], ['raid_plan_edit_101', 1, 'Düzenle / Edit'], ['raid_plan_recalc_101', 2, 'Yenile / Regenerate']
+        ['raid_plan_approve_101', 3, 'Onayla / Approve'], ['raid_plan_edit_101', 1, 'Düzenle / Edit'], ['raid_plan_recalc_101', 2, 'Yenile / Regenerate'], ['raid_plan_share_101', 1, 'Paylaş / Share Now']
     ]);
 });
 
@@ -237,6 +242,58 @@ test('manuel düzenleme mevcut menüyü açar; kayıt sonrası ana embed ve PNG 
     assert.equal(h.events.filter(e => e.kind === 'dm').length, 1);
     assert.equal(main.files.length, 1);
     assert.ok(selection.deferred);
+});
+
+test('leader can share the reviewed PNG after editing; repeated/concurrent clicks send one version', async () => {
+    const h = harness(); await h.draft();
+    const main = h.main();
+    await h.controller.handle(h.interaction('edit', main));
+    await h.controller.handle(h.interaction('value', h.message('editor'), '_1_artifact'));
+    const image = main.files[0].attachment;
+    const before = [h.raid.finalSent, h.raid.fiveMinuteCheckpointSent, h.raid.kickoffFinalSent];
+    await Promise.all([h.controller.handle(h.interaction('share', main)), h.controller.handle(h.interaction('share', main))]);
+    await h.controller.handle(h.interaction('share', main));
+    const shares = h.events.filter(e => e.kind === 'share');
+    assert.equal(shares.length, 1);
+    assert.equal(shares[0].prepared.image, image);
+    assert.equal(h.raid.manualPlanMessageId, 'public-plan');
+    assert.deepEqual([h.raid.finalSent, h.raid.fiveMinuteCheckpointSent, h.raid.kickoffFinalSent], before);
+    await h.controller.handle(h.interaction('recalc', main));
+    await h.controller.handle(h.interaction('share', main));
+    assert.equal(h.events.filter(e => e.kind === 'share').length, 2);
+});
+
+test('sharing works for approved plans but rejects strangers and refreshes stale or recovered previews first', async () => {
+    const h = harness(); await h.draft(); const main = h.main();
+    await h.controller.handle(h.interaction('share', main, '', 'stranger'));
+    assert.equal(h.events.filter(e => e.kind === 'share').length, 0);
+    h.players.pop();
+    await h.controller.handle(h.interaction('share', main));
+    assert.equal(h.events.filter(e => e.kind === 'share').length, 0);
+    await h.controller.handle(h.interaction('share', main));
+    assert.equal(h.events.filter(e => e.kind === 'share').length, 1);
+    const approved = harness(); await approved.draft();
+    await approved.controller.handle(approved.interaction('approve', approved.main()));
+    await approved.controller.handle(approved.interaction('share', approved.main()));
+    assert.equal(approved.events.filter(e => e.kind === 'share').length, 1);
+    const recovered = harness(); const old = recovered.message('legacy');
+    await recovered.controller.handle(recovered.interaction('share', old));
+    assert.equal(recovered.events.filter(e => e.kind === 'share').length, 0);
+    await recovered.controller.handle(recovered.interaction('share', old));
+    assert.equal(recovered.events.filter(e => e.kind === 'share').length, 1);
+});
+
+test('failed manual sharing does not record success and permits retry after refreshing', async t => {
+    t.mock.method(console, 'error', () => {});
+    const h = harness(); await h.draft(); const main = h.main();
+    const send = h.deps.share;
+    h.deps.share = async () => { throw new Error('Missing permission'); };
+    await h.controller.handle(h.interaction('share', main));
+    assert.equal(h.raid.manualPlanMessageId, undefined);
+    h.deps.share = send;
+    await h.controller.handle(h.interaction('share', main));
+    await h.controller.handle(h.interaction('share', main));
+    assert.equal(h.events.filter(e => e.kind === 'share').length, 1);
 });
 
 test('kadrosu değişmiş eski düzenleme menüsü yeni plana yazamaz', async () => {

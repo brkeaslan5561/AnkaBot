@@ -54,8 +54,11 @@ registration messages, then posts **Upcoming Raids** to the command's channel.
 Deleted/unavailable selections require reviewing the remaining choices before
 sharing again. Published raids link to their original message with **Join Raid**;
 unpublished raids say **Registration Not Yet Open** and show **Registration
-Opens**. Dates use the raid's saved timezone; legacy records without one display
-UTC explicitly rather than inventing an organizer timezone.
+Opens**. Announcement dates, times, and registration opening times use Discord
+timestamps (`D`, `t`, and `F`), so viewers see their own local time. The saved UTC
+start and publication times remain unchanged. Selector labels use plain English
+dates in the raid's saved timezone (UTC for legacy records without one), because
+Discord select options do not render timestamps.
 
 Announcements use one embed per message and split at complete raid boundaries
 to stay within Discord's description and total embed limits. No registration

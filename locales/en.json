@@ -142,6 +142,8 @@
   "raid.manual.overflow": "⚠️ The main roster has {{capacity}} players, so {{user}} was added as a reserve.",
   "raid.manual.dps_overflow": "⚠️ The DPS limit of {{capacity}} has been reached, so {{user}} was added as a reserve.",
   "raid.manual.success": "✅ {{user}} was added successfully.",
+  "raid.manual.missing_inventory": "Some equipment is missing from this class profile. The player should update their artifact, mount and companion selections through the raid registration card.",
+  "raid.plan.manual_share": "Updated raid plan",
   "raid.edit.no_fields": "❌ Enter at least one field.",
   "raid.edit.time_format": "❌ Time must use the `21:30` format.",
   "raid.edit.legacy_date": "❌ For this legacy record, enter day, month, and time together.",

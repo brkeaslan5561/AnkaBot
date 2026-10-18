@@ -42,7 +42,8 @@ function planActionRow(id, approved = false, confirmation = null, disabled = fal
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`raid_plan_approve_${id}`).setLabel('Onayla / Approve').setStyle(ButtonStyle.Success).setDisabled(approved || disabled),
         new ButtonBuilder().setCustomId(`raid_plan_edit_${id}`).setLabel('Düzenle / Edit').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`raid_plan_recalc_${id}`).setLabel('Yenile / Regenerate').setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`raid_plan_recalc_${id}`).setLabel('Yenile / Regenerate').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`raid_plan_share_${id}`).setLabel('Paylaş / Share Now').setStyle(ButtonStyle.Primary).setDisabled(disabled)
     );
 }
 
@@ -102,7 +103,7 @@ function createLeaderReview(deps) {
             const message = await publish(client, id, raid, payload, reviews.get(id));
             // The stored fingerprint describes the PNG actually sent, even if signup
             // data changed while Discord was accepting the edit. Approval checks it.
-            reviews.set(id, { message, fingerprint, plans, imageName: 'raid-plan.png', confirmation: null });
+            reviews.set(id, { message, fingerprint, plans, image, imageName: 'raid-plan.png', confirmation: null });
             editors.delete(id);
             if (!current(id, raid)) return false;
             raid.draftSent = true;
@@ -133,7 +134,7 @@ function createLeaderReview(deps) {
         const parts = interaction.customId?.split('_') || [];
         const action = parts[2];
         const id = parts[3];
-        const button = interaction.isButton() && ['approve', 'confirm', 'cancel', 'recalc', 'edit'].includes(action);
+        const button = interaction.isButton() && ['approve', 'confirm', 'cancel', 'recalc', 'edit', 'share'].includes(action);
         const valueSelection = interaction.isStringSelectMenu() && action === 'value';
         if (!interaction.customId?.startsWith('raid_plan_') || (!button && !valueSelection)) return null;
         const raid = deps.getRaid(id);
@@ -192,6 +193,28 @@ function createLeaderReview(deps) {
                 raid.planNeedsRefresh = true;
                 deps.save(id, raid);
                 await refresh(interaction.client, id, raid);
+                return true;
+            }
+            if (action === 'share') {
+                const fingerprint = deps.fingerprint(raid);
+                if (review.fingerprint !== fingerprint || !review.image) {
+                    await refresh(interaction.client, id, raid);
+                    await notify(interaction, 'Tablo güncellendi. Kontrol edip Paylaş düğmesine tekrar basın. / The plan was updated. Review it and click Share Now again.');
+                    return true;
+                }
+                if (raid.manualPlanFingerprint === fingerprint) {
+                    deps.save(id, raid);
+                    await notify(interaction, 'Bu tablo zaten paylaşıldı. / This version of the plan has already been shared.');
+                    return true;
+                }
+                const message = await deps.share(interaction.client, id, raid, {
+                    plan: review.plans.tr, image: review.image, fingerprint,
+                    isCurrent: () => current(id, raid) && deps.fingerprint(raid) === fingerprint
+                });
+                raid.manualPlanFingerprint = fingerprint;
+                raid.manualPlanMessageId = message.id;
+                deps.save(id, raid);
+                await notify(interaction, 'Güncel raid tablosu kanalda paylaşıldı. / The current raid plan was shared in the channel.');
                 return true;
             }
             if (raid.planApproved) {

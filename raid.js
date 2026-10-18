@@ -13,8 +13,9 @@ const {
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { createHash } = require('node:crypto');
 const { selectOptions, findCatalogItem } = require('./raid_catalog');
-const { assignRaid, inventoryOf } = require('./raid_assignment');
+const { assignRaid, inventoryOf, setRaidOverride } = require('./raid_assignment');
 const { renderRaidTable } = require('./raid_table');
 const { createLeaderReview } = require('./raid_leader');
 const { createRaidCreation } = require('./raid_creation');
@@ -435,12 +436,29 @@ function penaltyMessage(status, language = 'tr') {
 }
 
 function profileClassKey(className) {
-    return String(className || '').trim().toLocaleLowerCase('tr-TR');
+    return String(className || '').trim().replace(/[Iİı]/g, 'i').toLowerCase()
+        .replace(/\s*\((?:tank|heal|healer|dps|damage|support)\)\s*$/, '').trim();
+}
+
+function findSavedProfile(profiles, className) {
+    const key = profileClassKey(className);
+    return Object.entries(profiles || {})
+        .filter(([storedKey, profile]) => profile && profileClassKey(profile.className || storedKey) === key)
+        .sort((a, b) => (Number(b[1].updatedAt) || 0) - (Number(a[1].updatedAt) || 0))[0]?.[1] || null;
 }
 
 function getProfile(userId, className) {
-    const profile = profilVerisi.profiles?.[String(userId)]?.[profileClassKey(className)];
+    const profile = findSavedProfile(profilVerisi.profiles?.[String(userId)], className);
     return profile ? deepClone(profile) : null;
+}
+
+function manualPlayerInventory(raid, userId, className, profile) {
+    if (profile) return normalizeInventory(profile.inventory);
+    // A repeated manual add must not erase equipment already saved on this
+    // player's raid entry. Never borrow inventory from another class or user.
+    const existing = ['tanklar', 'healerlar', 'dpsler', 'yedekler'].flatMap(key => raid[key] || [])
+        .find(player => String(player.userId) === String(userId) && profileClassKey(player.klas || player.class) === profileClassKey(className));
+    return normalizeInventory(existing?.inventory || existing?.envanter);
 }
 
 function saveProfile(userId, className, inventory) {
@@ -1283,6 +1301,7 @@ const leaderReview = createLeaderReview({
     }),
     render: (client, raid, plan) => renderRaidTable(raid, plan, { language: 'tr', botUser: client.user }),
     save: saveRaid,
+    share: (client, id, raid, prepared) => sendFinalPlan(client, id, raid, 'manual', prepared),
     openEditor: async (interaction, messageId, raid) => {
         const language = interactionLanguage(interaction);
         if (!mainParticipants(raid).length) {
@@ -1296,11 +1315,7 @@ const leaderReview = createLeaderReview({
         return interaction.fetchReply();
     },
     setAssignment: (raid, userId, category, value) => {
-        if (!['artifact', 'mount', 'companion', 'aura'].includes(category) || !findParticipant(raid, userId)) {
-            throw new Error('Invalid raid plan assignment');
-        }
-        if (!raid.planOverrides[userId]) raid.planOverrides[userId] = {};
-        raid.planOverrides[userId][category] = value === NONE_VALUE ? null : value;
+        setRaidOverride(raid, mainParticipants(raid), userId, category, value === NONE_VALUE ? null : value);
         raid.planApproved = false;
         raid.planNeedsRefresh = true;
     }
@@ -1310,12 +1325,16 @@ async function sendDraft(client, messageId, raid, reasonKey = null) {
     return leaderReview.sendDraft(client, messageId, raid);
 }
 
-async function sendFinalPlan(client, messageId, raid, phase = 'initial') {
+async function sendFinalPlan(client, messageId, raid, phase = 'initial', prepared = null) {
     const language = raidLanguage(raid);
-    const plan = generatePlan(raid, language);
+    const plan = prepared?.plan || generatePlan(raid, language);
     const status = t(language, raid.planApproved ? 'raid.table.approved' : 'raid.table.auto');
-    const image = await renderRaidTable(raid, plan, { status, language, botUser: client.user });
+    const image = prepared?.image || await renderRaidTable(raid, plan, { status, language, botUser: client.user });
     const phaseDetails = {
+        manual: {
+            heading: t(language, 'raid.plan.manual_share'),
+            fileSuffix: 'updated-plan'
+        },
         initial: {
             heading: t(language, 'raid.plan.initial'),
             fileSuffix: 'plan'
@@ -1339,13 +1358,17 @@ async function sendFinalPlan(client, messageId, raid, phase = 'initial') {
     const mentions = users.map(userId => `<@${userId}>`).join(' ');
     const channel = await client.channels.fetch(raid.channelId);
     if (!channel?.send) throw new Error('Raid kanalı bulunamadı.');
+    if (phase === 'manual' && (!prepared?.isCurrent() || raid.published === false || isRaidClosed(raid))) throw new Error('Raid plan changed before sharing');
 
     const content = `${phaseDetails.heading}\n${mentions}`.trim();
     const message = await channel.send({
         content,
         files: [attachment],
-        allowedMentions: { users }
+        allowedMentions: phase === 'manual' ? { parse: [] } : { users },
+        ...(phase === 'manual' ? { nonce: createHash('sha256').update(`${messageId}:${prepared.fingerprint}`).digest('hex').slice(0, 24), enforceNonce: true } : {})
     });
+    // Explicit sharing does not consume the automatic T-15/T-5/kickoff steps.
+    if (phase === 'manual') return message;
     raid.finalSent = true;
     if (phase === 'checkpoint') raid.fiveMinuteCheckpointSent = true;
     if (phase === 'kickoff') raid.kickoffFinalSent = true;
@@ -1597,16 +1620,19 @@ async function raidManuelOyuncuEkle(interaction) {
     if (penalty.blocked) return interaction.editReply(t(language, 'raid.manual.blocked', { user, reason: penaltyMessage(penalty, language) }));
 
     const profile = getProfile(user.id, className);
-    const inventory = profile ? profile.inventory : normalizeInventory();
+    const inventory = manualPlayerInventory(raid, user.id, className, profile);
     const displayName = member?.displayName || user.globalName || user.username;
     const result = registerParticipant(raid, user, displayName, requestedRole, className, inventory);
     saveRaid(messageId, raid);
     const raidMessage = await updateRaidCard(interaction.client, messageId, raid, interaction.channelId);
 
     const notification = await sendManualRaidAddNotification(interaction.client, messageId, raid, user, result, raidMessage);
-    const reply = result.overflow
+    let reply = result.overflow
         ? t(language, result.dpsLimitReached ? 'raid.manual.dps_overflow' : 'raid.manual.overflow', { capacity: result.dpsLimitReached ? dpsLimitForRaid(raid) : raid.capacity, user })
         : t(language, 'raid.manual.success', { user });
+    if (!inventory.artifacts.length || !inventory.mounts.length || !inventory.companions.length) {
+        reply += '\n' + t(language, 'raid.manual.missing_inventory');
+    }
     return interaction.editReply(notification === 'failed'
         ? `${reply}\nOyuncu raid'e başarıyla eklendi ancak özel mesaj gönderilemedi.\n*The player was added successfully, but the direct message could not be delivered.*`
         : reply);
@@ -2052,6 +2078,9 @@ module.exports = {
         buildManualRaidAddEmbed,
         sendManualRaidAddNotification,
         normalizeRaid,
+        profileClassKey,
+        findSavedProfile,
+        manualPlayerInventory,
         registerParticipant,
         isRaidClosed,
         contentTypeFromValue,

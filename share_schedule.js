@@ -34,14 +34,12 @@ function scheduleEmbeds(records) {
     };
     for (const record of records) {
         const { raid } = record;
-        const zone = raid.organizerTimeZone || 'UTC';
-        const time = englishDate(raid.unixZamani, zone);
+        const timestamp = Math.floor(Number(raid.unixZamani));
         const link = registrationLink(record);
-        let block = `\n\n**${escapeMarkdown(String(raid.zindan || raid.zindanKodu || 'Raid').toUpperCase())}**\nDate: ${time.date}\nTime: ${time.time} (${zone})\nLeader: <@${raid.leaderId || raid.creatorId}>\nStatus: ${link ? 'Registration Open' : 'Registration Not Yet Open'}`;
+        let block = `\n\n**${escapeMarkdown(String(raid.zindan || raid.zindanKodu || 'Raid').toUpperCase())}**\nDate: <t:${timestamp}:D>\nTime: <t:${timestamp}:t>\nLeader: <@${raid.leaderId || raid.creatorId}>\nStatus: ${link ? 'Registration Open' : 'Registration Not Yet Open'}`;
         if (link) block += `\n[Join Raid](${link})`;
         else if (Number.isFinite(raid.publishAt)) {
-            const opens = englishDate(raid.publishAt, zone);
-            block += `\nRegistration Opens: ${opens.date} at ${opens.time}`;
+            block += `\nRegistration Opens: <t:${Math.floor(raid.publishAt)}:F>`;
         }
         if (description.length + block.length > 4000) flush();
         // Titles created through the wizard are <=80 characters. Reject

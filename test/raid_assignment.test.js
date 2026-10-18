@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { assignRaid } = require('../raid_assignment');
+const { assignRaid, setRaidOverride } = require('../raid_assignment');
 
 function player(id, role, inventory = {}) {
     return {
@@ -22,6 +22,62 @@ function player(id, role, inventory = {}) {
 function planFor(contentType, players) {
     return assignRaid({ contentType, capacity: contentType === 'trial' ? 10 : 5 }, players);
 }
+
+test('moving an artifact or companion pins the new owner and refills the displaced player from owned alternatives', () => {
+    for (const [category, inventory, primary, fallback] of [
+        ['artifact', 'artifacts', 'Mythallar Fragment', 'Lantern of Revelation'],
+        ['companion', 'companions', 'Tutor', 'Minsc'],
+        ['mount', 'mounts', 'Swarm', 'Eclipse Lion']
+    ]) {
+        const players = [player(1, 'tank', { [inventory]: [primary, fallback] }), player(2, 'heal', { [inventory]: [primary, fallback] })];
+        const raid = { contentType: 'dungeon', capacity: 5 };
+        const initial = assignRaid(raid, players);
+        const previous = initial.rows.find(row => row[category] === primary);
+        const receiver = initial.rows.find(row => row.userId !== previous.userId);
+        setRaidOverride(raid, players, receiver.userId, category, primary);
+        const updated = assignRaid(raid, players, raid.planOverrides);
+        assert.equal(updated.rows.find(row => row.userId === receiver.userId)[category], primary);
+        assert.equal(updated.rows.find(row => row.userId === previous.userId)[category], fallback);
+    }
+});
+
+test('transferring an already pinned item releases its old override and permits chained automatic reassignment', () => {
+    const players = [
+        player(1, 'tank', { artifacts: ['Mythallar Fragment', 'Lantern of Revelation'] }),
+        player(2, 'heal', { artifacts: ['Lantern of Revelation', 'Heart of the Volcano'] }),
+        player(3, 'dps', { artifacts: ['Mythallar Fragment'] })
+    ];
+    const raid = { contentType: 'dungeon', planOverrides: { '1': { artifact: 'Mythallar Fragment' } } };
+    setRaidOverride(raid, players, '3', 'artifact', 'Mythallar Fragment');
+    assert.equal(raid.planOverrides['1'].artifact, undefined);
+    const plan = assignRaid(raid, players, raid.planOverrides);
+    assert.deepEqual(plan.rows.map(row => row.artifact), ['Lantern of Revelation', 'Heart of the Volcano', 'Mythallar Fragment']);
+});
+
+test('refill keeps explicit empty cells, respects ownership and preserves the trial Scorpion limit', () => {
+    const players = [
+        player(1, 'dps', { companions: ['Black Death Scorpion', 'Tutor'] }),
+        player(2, 'dps', { companions: ['Black Death Scorpion', 'Minsc'] }),
+        player(3, 'dps', { companions: ['Black Death Scorpion'] }),
+        player(4, 'dps', { companions: ['Tutor'] })
+    ];
+    const raid = { contentType: 'trial', planOverrides: { '1': { companion: 'Black Death Scorpion' }, '2': { companion: 'Black Death Scorpion' }, '4': { companion: null } } };
+    const before = structuredClone(players);
+    setRaidOverride(raid, players, '3', 'companion', 'Black Death Scorpion');
+    const plan = assignRaid(raid, players, raid.planOverrides);
+    assert.equal(plan.rows.filter(row => row.companion === 'Black Death Scorpion').length, 2);
+    assert.equal(plan.rows[0].companion, 'Tutor');
+    assert.equal(plan.rows[3].companion, null);
+    assert.deepEqual(players, before);
+    assert.throws(() => setRaidOverride(raid, players, '3', 'companion', 'Minsc'), /does not own/);
+});
+
+test('displaced players without compatible alternatives stay unassigned rather than receive unowned or duplicate items', () => {
+    const players = [player(1, 'tank', { artifacts: ['Dragonbone Blades'] }), player(2, 'dps', { artifacts: ['Wyvern-Venom Coated Knives'] })];
+    const plan = assignRaid({ contentType: 'dungeon' }, players, { '2': { artifact: 'Wyvern-Venom Coated Knives' } });
+    assert.equal(plan.rows[0].artifact, null);
+    assert.equal(plan.rows[1].artifact, 'Wyvern-Venom Coated Knives');
+});
 
 test('Dragonbone ile Wyvern tek gruptur; Nightflame aynı tabloda ayrıca atanabilir', () => {
     const plan = planFor('trial', [

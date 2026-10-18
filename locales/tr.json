@@ -142,6 +142,8 @@
   "raid.manual.overflow": "⚠️ Ana kadro {{capacity}} kişi olduğu için {{user}} yedeğe eklendi.",
   "raid.manual.dps_overflow": "⚠️ {{capacity}} kişilik DPS sınırına ulaşıldığı için {{user}} yedeğe eklendi.",
   "raid.manual.success": "✅ {{user}} başarıyla eklendi.",
+  "raid.manual.missing_inventory": "Bu klas profilinde bazı ekipman bilgileri eksik. Oyuncu raid kayıt kartından eser, binek ve yoldaş seçimlerini güncellemelidir.",
+  "raid.plan.manual_share": "Güncel raid tablosu",
   "raid.edit.no_fields": "❌ En az bir alan girmelisiniz.",
   "raid.edit.time_format": "❌ Saat `21:30` biçiminde olmalı.",
   "raid.edit.legacy_date": "❌ Eski kayıt için gün, ay ve saatin tümünü girin.",

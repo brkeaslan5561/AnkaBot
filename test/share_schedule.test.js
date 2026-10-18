@@ -71,6 +71,10 @@ test('sharing is read-only and uses original registration links, never registrat
     await h.call(); await h.call('select-0', { values: ['stable-0', 'stable-1'] }); await h.call('share');
     assert.equal(JSON.stringify(h.records), before);
     const text = h.sent[0].embeds[0].description;
+    assert.ok(text.includes(`Date: <t:${h.records[0].raid.unixZamani}:D>`));
+    assert.ok(text.includes(`Time: <t:${h.records[0].raid.unixZamani}:t>`));
+    assert.ok(text.includes(`Registration Opens: <t:${h.records[1].raid.publishAt}:F>`));
+    assert.ok(!text.includes('(Europe/Istanbul)'));
     assert.match(text, /Status: Registration Open/); assert.match(text, /Status: Registration Not Yet Open/);
     assert.match(text, /Registration Opens:/);
     assert.ok(text.includes('[Join Raid](https://discord.com/channels/111111111111111111/222222222222222222/800000000000000000)'));

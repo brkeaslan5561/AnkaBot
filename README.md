@@ -219,6 +219,16 @@ Yeni komutlar bot başlatılırken mevcut global komut kayıt sistemiyle otomati
 
 Bu dosyalar Git tarafından izlenmez ve ilk kullanımda güvenli şekilde oluşturulur. Şema dönüşümü veya ayrı bir veritabanı kurulumu gerekmez.
 
+## Ekipman atamaları ve tabloyu elle paylaşma
+
+Manuel oyuncu eklemede sınıf adları büyük/küçük harften ve sonundaki rol etiketinden bağımsız eşleştirilir (`Wizard`, `WIZARD`, `Wizard (DPS)`). Aynı sınıf için kayıtlı profilin artifact, mount, companion ve aura envanteri kullanılır. Profil bulunamazsa oyuncunun aynı raid ve sınıftaki mevcut envanteri korunur. Kayıtlı ekipman eksikse yöneticiye bilgi verilir; başka oyuncunun veya sınıfın ekipmanı kullanılmaz.
+
+Lider bir artifact, companion veya sınırlı mount atamasını başka oyuncuya taşıdığında, önceki oyuncu sahip olduğu uygun alternatiflerle yeniden atanır. Manuel sabitlenen seçimler, bilerek boş bırakılan hücreler ve ekipman tekrar limitleri korunur. Uygun alternatif yoksa hücre boş kalır ve tabloda uyarı görünür.
+
+Liderin tablo önizlemesindeki **Paylaş / Share Now** düğmesi, görüntülenen güncel PNG'yi raid kanalına gönderir. Tablo önizlemeden sonra değişmişse önce yenilenir ve liderin tekrar paylaşması istenir. Aynı tablo sürümünün tekrar paylaşılması engellenir; değişiklik yapıldıktan sonra yeniden paylaşılabilir. Elle paylaşım otomatik T-15, T-5 ve başlangıç paylaşımlarını tüketmez, katılımcılara yeni ping göndermez. `raid_data.json` içinde `manualPlanFingerprint` ve `manualPlanMessageId` saklanır; eski kayıtlarda bu alanların bulunması gerekmez.
+
+`/share-schedule` duyurusunun tarih, saat ve kayıt açılış zamanı Discord timestamp kullanır; herkes kendi yerel saatini görür. Raid'in kayıtlı UTC zamanı değişmez. Yeni komut veya bağımlılık eklenmediğinden bu iyileştirmeler için normal bot yeniden başlatması yeterlidir.
+
 ## Manuel ekleme DM bildirimi
 
 `/raid-oyuncu-ekle`, yeni bir Discord kullanıcısının kaydı başarıyla diske yazıldıktan sonra tek bir Türkçe/İngilizce embed DM gönderir. Mevcut kaydı güncellemek, rol değiştirmek, PNG yenilemek ve botu yeniden başlatmak bildirim göndermez. Oyuncu çıkarılıp yeniden eklenirse yeni bildirim gönderilir. `/düzenle` mevcut projede yalnızca raid tarihi, saati ve açıklamasını değiştirir; oyuncu eklemez.

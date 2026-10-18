@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { EmbedBuilder } = require('discord.js');
-const { _test: { buildRaidNotificationEmbed, buildManualRaidAddEmbed, manualRaidLinkRow, sendManualRaidAddNotification, registerParticipant } } = require('../raid');
+const { _test: { buildRaidNotificationEmbed, buildManualRaidAddEmbed, manualRaidLinkRow, sendManualRaidAddNotification, registerParticipant, manualPlayerInventory, dpsLimitForRaid, findSavedProfile, profileClassKey } } = require('../raid');
 
 const messageId = '123456789012345678';
 const userId = '223456789012345678';
@@ -26,7 +26,8 @@ function harness(raid = fixture()) {
         raidHafizasi: new Map([[messageId, raid]]),
         isRaidClosed: () => false,
         raidPenaltyStatus: () => ({ blocked: false }),
-        getProfile: () => null,
+        getProfile: () => state.profile || null,
+        manualPlayerInventory, dpsLimitForRaid,
         normalizeInventory: () => ({}),
         registerParticipant,
         saveRaid: () => {
@@ -105,6 +106,37 @@ test('new manual addition persists before sending exactly one DM', async () => {
     assert.equal(h.sent.length, 1);
     assert.equal(h.sent[0].payload.embeds.length, 1);
     assert.equal(h.raid.dpsler[0].userId, userId);
+});
+
+test('profile lookup handles uppercase English class names, Turkish I and role labels without mixing classes', () => {
+    const inventory = { artifacts: ['Mythallar Fragment'], mounts: ['Swarm'], companions: ['Tutor'], auras: [] };
+    const profiles = {
+        'wızard': { className: 'WIZARD', inventory, updatedAt: 1 },
+        'wizard': { className: 'Wizard', inventory: { ...inventory, mounts: ['Tunnel Vision'] }, updatedAt: 2 },
+        'fighter': { className: 'Fighter', inventory: {}, updatedAt: 3 }
+    };
+    assert.equal(profileClassKey(' WIZARD (DPS) '), 'wizard');
+    assert.equal(profileClassKey('Fighter (Tank)'), 'fighter');
+    assert.deepEqual(findSavedProfile(profiles, 'WIZARD (DPS)').inventory.mounts, ['Tunnel Vision']);
+    assert.equal(findSavedProfile(profiles, 'Paladin'), null);
+});
+
+test('manual addition loads all saved equipment and repeated addition does not erase raid inventory when the profile is missing', async () => {
+    const h = harness();
+    const inventory = { artifacts: ['Lantern of Revelation'], mounts: ['Demonic Gravehound'], companions: ['Tutor'], auras: [] };
+    h.profile = { inventory };
+    await h.add();
+    assert.deepEqual(h.raid.dpsler[0].inventory, inventory);
+    h.profile = null;
+    await h.add();
+    assert.deepEqual(h.raid.dpsler[0].inventory, inventory);
+    assert.equal(h.sent.length, 1);
+    assert.deepEqual(manualPlayerInventory(h.raid, userId, 'Paladin', null), { artifacts: [], mounts: [], companions: [], auras: [] });
+});
+
+test('missing equipment is reported to the manager instead of silently presenting an empty profile', async () => {
+    const h = harness(); await h.add();
+    assert.match(h.replies.at(-1), /raid.manual.missing_inventory/);
 });
 
 test('simultaneous distinct additions each get one DM; same-player double click gets one', async () => {
